@@ -138,8 +138,9 @@ class PreferencesWindowController: NSWindowController, NSTableViewDataSource, NS
 
     var envTable: NSTableView!
     var svcTable: NSTableView!
+    var svcPlaceholder: NSTextField!
     var dashboardUrlField: NSTextField!
-    var selectedEnvIndex: Int = 0
+    var selectedEnvIndex: Int = -1
 
     init(config: LauncherConfig, onSave: @escaping (LauncherConfig) -> Void) {
         self.config = config
@@ -262,6 +263,15 @@ class PreferencesWindowController: NSWindowController, NSTableViewDataSource, NS
         svcScroll.hasVerticalScroller = true
         svcScroll.borderType = .bezelBorder
         contentView.addSubview(svcScroll)
+
+        // Placeholder shown when no environment is selected
+        svcPlaceholder = NSTextField(labelWithString: "Select an environment above to view its services")
+        svcPlaceholder.frame = NSRect(x: 20, y: y - 80, width: 680, height: 20)
+        svcPlaceholder.alignment = .center
+        svcPlaceholder.font = NSFont.systemFont(ofSize: 12)
+        svcPlaceholder.textColor = .secondaryLabelColor
+        contentView.addSubview(svcPlaceholder)
+
         y -= 160
 
         // ── Save / Cancel ──
@@ -347,8 +357,9 @@ class PreferencesWindowController: NSWindowController, NSTableViewDataSource, NS
 
     func tableViewSelectionDidChange(_ notification: Notification) {
         guard let table = notification.object as? NSTableView, table.tag == 1 else { return }
-        selectedEnvIndex = table.selectedRow >= 0 ? table.selectedRow : 0
+        selectedEnvIndex = table.selectedRow
         svcTable.reloadData()
+        svcPlaceholder.isHidden = selectedEnvIndex >= 0
     }
 
     @objc func addEnvironment() {
@@ -616,6 +627,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 // ─── Main ───────────────────────────────────────────────────────────
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
+
+// Add an Edit menu so Cmd+A/C/V/X/Z work in text fields.
+// Accessory apps don't get a default menu bar, so keyboard shortcuts
+// for text editing are broken without this.
+let mainMenu = NSMenu()
+let editMenuItem = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
+let editMenu = NSMenu(title: "Edit")
+editMenu.addItem(NSMenuItem(title: "Undo", action: Selector(("undo:")), keyEquivalent: "z"))
+editMenu.addItem(NSMenuItem(title: "Redo", action: Selector(("redo:")), keyEquivalent: "Z"))
+editMenu.addItem(NSMenuItem.separator())
+editMenu.addItem(NSMenuItem(title: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x"))
+editMenu.addItem(NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c"))
+editMenu.addItem(NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v"))
+editMenu.addItem(NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))
+editMenuItem.submenu = editMenu
+mainMenu.addItem(editMenuItem)
+app.mainMenu = mainMenu
+
 let delegate = AppDelegate()
 app.delegate = delegate
 app.run()

@@ -1,0 +1,202 @@
+#!/bin/bash
+
+# ── Tilt Launcher Pre-commit Checks ─────────────────────────────────
+# Runs formatting, type checks, linting, and builds before each commit.
+# To skip: git commit --no-verify
+
+set -e
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+DIM='\033[2m'
+BOLD='\033[1m'
+RESET='\033[0m'
+
+passed() { echo -e "  ${GREEN}✓${RESET} $1"; }
+failed() { echo -e "  ${RED}✗${RESET} $1"; }
+skipped() { echo -e "  ${YELLOW}○${RESET} $1 ${DIM}(skipped)${RESET}"; }
+
+REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+
+# ── Stash unstaged changes ───────────────────────────────────────────
+# This ensures we check exactly what's being committed, not what's in
+# the working tree. Unstaged changes are restored after checks complete.
+STASH_NAME="pre-commit-$(date +%s)"
+STASHED=0
+
+# Check if there are unstaged changes (including untracked files in src/)
+if ! git diff --quiet || ! git diff --cached --quiet --diff-filter=d; then
+    # Only stash if there are actually unstaged modifications
+    if ! git diff --quiet; then
+        git stash push -q --keep-index --include-untracked -m "$STASH_NAME"
+        STASHED=1
+    fi
+fi
+
+restore_stash() {
+    if [ "$STASHED" -eq 1 ]; then
+        git stash pop -q 2>/dev/null || true
+    fi
+}
+
+# Always restore stash on exit (success or failure)
+trap restore_stash EXIT
+
+echo -e "\n${BOLD}▲ Pre-commit checks${RESET}"
+echo -e "${DIM}  ────────────────────────────────────${RESET}\n"
+
+# ━━ Code Quality ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+echo -e "  ${BOLD}Code Quality${RESET}"
+
+# ── 1. Prettier ──────────────────────────────────────────────────────
+echo -e "  ${DIM}Formatting...${RESET}"
+if bun prettier --check . --log-level=silent 2>/dev/null; then
+    passed "Prettier"
+else
+    failed "Prettier"
+    echo ""
+    bun prettier --check . 2>/dev/null | grep "^\[warn\]" | sed 's/\[warn\]/    →/' || true
+    echo -e "\n  Run ${BOLD}bun run format${RESET} to fix.\n"
+    exit 1
+fi
+
+# ── 2. TypeScript ────────────────────────────────────────────────────
+echo -e "  ${DIM}Type checking (tsgo)...${RESET}"
+TYPE_OUTPUT=$(bun tsgo --noEmit 2>&1)
+if [ $? -eq 0 ]; then
+    passed "TypeScript"
+else
+    failed "TypeScript"
+    echo ""
+    echo "$TYPE_OUTPUT" | grep "error TS" | head -10 | sed 's/^/    /'
+    TOTAL=$(echo "$TYPE_OUTPUT" | grep -c "error TS" || true)
+    [ "$TOTAL" -gt 10 ] && echo -e "    ${DIM}... and $((TOTAL - 10)) more${RESET}"
+    echo ""
+    exit 1
+fi
+
+# ── 3. ESLint ────────────────────────────────────────────────────────
+echo -e "  ${DIM}Linting (eslint)...${RESET}"
+LINT_OUTPUT=$(bun eslint src/ 2>&1)
+if [ $? -eq 0 ]; then
+    passed "ESLint"
+else
+    failed "ESLint"
+    echo ""
+    echo "$LINT_OUTPUT" | grep -E "^\s+[0-9]+:[0-9]+" | head -10 | sed 's/^/    /'
+    TOTAL=$(echo "$LINT_OUTPUT" | grep -cE "^\s+[0-9]+:[0-9]+" || true)
+    [ "$TOTAL" -gt 10 ] && echo -e "    ${DIM}... and $((TOTAL - 10)) more${RESET}"
+    echo -e "\n  Run ${BOLD}bun run lint:fix${RESET} to auto-fix what's possible.\n"
+    exit 1
+fi
+
+# ── 4. Swift type check ─────────────────────────────────────────────
+if [ -f "$REPO_DIR/TiltLauncher.swift" ]; then
+    echo -e "  ${DIM}Type checking (swift)...${RESET}"
+    SWIFT_OUTPUT=$(swiftc -typecheck "$REPO_DIR/TiltLauncher.swift" -framework Cocoa -framework ServiceManagement 2>&1)
+    if [ $? -eq 0 ]; then
+        passed "Swift types"
+    else
+        failed "Swift types"
+        echo ""
+        echo "$SWIFT_OUTPUT" | grep "error:" | head -10 | sed 's/^/    /'
+        TOTAL=$(echo "$SWIFT_OUTPUT" | grep -c "error:" || true)
+        [ "$TOTAL" -gt 10 ] && echo -e "    ${DIM}... and $((TOTAL - 10)) more${RESET}"
+        echo ""
+        exit 1
+    fi
+fi
+
+# ── 5. SwiftLint (optional) ─────────────────────────────────────────
+if [ -f "$REPO_DIR/TiltLauncher.swift" ] && command -v swiftlint &>/dev/null; then
+    echo -e "  ${DIM}Linting (swiftlint)...${RESET}"
+    SWIFTLINT_OUTPUT=$(cd "$REPO_DIR" && swiftlint lint --quiet TiltLauncher.swift 2>&1)
+    if [ -z "$SWIFTLINT_OUTPUT" ]; then
+        passed "SwiftLint"
+    else
+        ERR_COUNT=$(echo "$SWIFTLINT_OUTPUT" | grep -c "error:" || true)
+        WARN_COUNT=$(echo "$SWIFTLINT_OUTPUT" | grep -c "warning:" || true)
+        if [ "$ERR_COUNT" -gt 0 ]; then
+            failed "SwiftLint ($ERR_COUNT errors, $WARN_COUNT warnings)"
+            echo ""
+            echo "$SWIFTLINT_OUTPUT" | grep "error:" | head -10 | sed 's/^/    /'
+            echo ""
+            exit 1
+        else
+            passed "SwiftLint ${DIM}($WARN_COUNT warnings)${RESET}"
+        fi
+    fi
+elif [ -f "$REPO_DIR/TiltLauncher.swift" ]; then
+    skipped "SwiftLint (not installed — brew install swiftlint)"
+fi
+
+# ── 6. Node server syntax ───────────────────────────────────────────
+if [ -f "$REPO_DIR/tilt-launcher.mjs" ]; then
+    echo -e "  ${DIM}Syntax check (node)...${RESET}"
+    NODE_OUTPUT=$(node --check "$REPO_DIR/tilt-launcher.mjs" 2>&1)
+    if [ $? -eq 0 ]; then
+        passed "Node server syntax"
+    else
+        failed "Node server syntax"
+        echo ""
+        echo "$NODE_OUTPUT" | head -5 | sed 's/^/    /'
+        echo ""
+        exit 1
+    fi
+fi
+
+# ━━ Builds ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+echo ""
+echo -e "  ${BOLD}Builds${RESET}"
+
+# ── 7. Vite build (Svelte dashboard) ────────────────────────────────
+echo -e "  ${DIM}Building dashboard (vite)...${RESET}"
+VITE_TMP=$(mktemp -d)
+VITE_OUTPUT=$(cd "$REPO_DIR" && bun vite build --outDir "$VITE_TMP" 2>&1)
+VITE_EXIT=$?
+if [ $VITE_EXIT -eq 0 ]; then
+    SIZE=$(echo "$VITE_OUTPUT" | grep "index-.*\.js" | grep -oE '[0-9]+\.[0-9]+ kB' | head -1 || echo "")
+    passed "Vite build ${DIM}${SIZE:+($SIZE)}${RESET}"
+else
+    failed "Vite build"
+    echo ""
+    echo "$VITE_OUTPUT" | grep -iE "error|failed" | head -10 | sed 's/^/    /'
+    echo ""
+    rm -rf "$VITE_TMP"
+    exit 1
+fi
+rm -rf "$VITE_TMP"
+
+# ── 8. Swift build (.app) ───────────────────────────────────────────
+if [ -f "$REPO_DIR/TiltLauncher.swift" ]; then
+    echo -e "  ${DIM}Building menu bar app (swiftc)...${RESET}"
+
+    ARCH=$(uname -m)
+    TARGET="${ARCH}-apple-macosx14.0"
+    SWIFT_TMP=$(mktemp -d)
+
+    SWIFT_BUILD_OUTPUT=$(swiftc -O \
+        -o "$SWIFT_TMP/TiltLauncher" \
+        "$REPO_DIR/TiltLauncher.swift" \
+        -framework Cocoa \
+        -framework ServiceManagement \
+        -target "$TARGET" 2>&1)
+
+    if [ $? -eq 0 ]; then
+        passed "Swift build ${DIM}($ARCH)${RESET}"
+    else
+        failed "Swift build"
+        echo ""
+        echo "$SWIFT_BUILD_OUTPUT" | grep "error:" | head -10 | sed 's/^/    /'
+        TOTAL=$(echo "$SWIFT_BUILD_OUTPUT" | grep -c "error:" || true)
+        [ "$TOTAL" -gt 10 ] && echo -e "    ${DIM}... and $((TOTAL - 10)) more${RESET}"
+        echo ""
+        rm -rf "$SWIFT_TMP"
+        exit 1
+    fi
+    rm -rf "$SWIFT_TMP"
+fi
+
+echo -e "\n${DIM}  ────────────────────────────────────${RESET}"
+echo -e "  ${GREEN}${BOLD}All checks passed${RESET}\n"

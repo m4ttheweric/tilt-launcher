@@ -40,6 +40,11 @@ else
     echo "⚠️  dist/ not found — run 'bun run build' first for the dashboard"
 fi
 
+# Copy app icon
+if [ -f "$SCRIPT_DIR/AppIcon.icns" ]; then
+    cp "$SCRIPT_DIR/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
+fi
+
 # Copy certs if they exist (for dev builds)
 if [ -d "$SCRIPT_DIR/.certs" ]; then
     cp -r "$SCRIPT_DIR/.certs" "$APP_BUNDLE/Contents/Resources/.certs"
@@ -69,8 +74,16 @@ cat > "$APP_BUNDLE/Contents/Info.plist" << PLIST
     <string>14.0</string>
     <key>LSUIElement</key>
     <true/>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSDocumentsFolderUsageDescription</key>
+    <string>Tilt Launcher needs access to your project directories to run Tilt commands.</string>
+    <key>NSDesktopFolderUsageDescription</key>
+    <string>Tilt Launcher needs access to your project directories to run Tilt commands.</string>
+    <key>NSDownloadsFolderUsageDescription</key>
+    <string>Tilt Launcher needs access to your project directories to run Tilt commands.</string>
 </dict>
 </plist>
 PLIST
