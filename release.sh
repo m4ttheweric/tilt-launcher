@@ -61,62 +61,14 @@ if [ "$BRANCH" != "main" ]; then
 fi
 echo -e "  ${GREEN}✓${RESET} On main branch"
 
-# ── Run all checks ───────────────────────────────────────────────────
+# ── Run all checks (same as pre-commit) ──────────────────────────────
 echo ""
-echo -e "  ${DIM}Running checks...${RESET}"
-
-echo -e "  ${DIM}  Prettier...${RESET}"
-bun prettier --check . --log-level=silent 2>/dev/null || {
-    echo -e "  ${RED}✗${RESET} Formatting issues. Run: bun run format"
+bash "$SCRIPT_DIR/hooks/pre-commit" || {
+    echo ""
+    echo -e "  ${RED}Checks failed. Fix the issues above and try again.${RESET}"
+    echo ""
     exit 1
 }
-echo -e "  ${GREEN}✓${RESET} Prettier"
-
-echo -e "  ${DIM}  TypeScript...${RESET}"
-bun tsgo --noEmit 2>/dev/null || {
-    echo -e "  ${RED}✗${RESET} Type errors"
-    exit 1
-}
-echo -e "  ${GREEN}✓${RESET} TypeScript"
-
-echo -e "  ${DIM}  ESLint...${RESET}"
-bun eslint src/ 2>/dev/null || {
-    echo -e "  ${RED}✗${RESET} Lint errors"
-    exit 1
-}
-echo -e "  ${GREEN}✓${RESET} ESLint"
-
-echo -e "  ${DIM}  Swift...${RESET}"
-swiftc -typecheck TiltLauncher.swift -framework Cocoa -framework ServiceManagement 2>/dev/null || {
-    echo -e "  ${RED}✗${RESET} Swift type errors"
-    exit 1
-}
-echo -e "  ${GREEN}✓${RESET} Swift"
-
-echo -e "  ${DIM}  Node server...${RESET}"
-node --check tilt-launcher.mjs 2>/dev/null || {
-    echo -e "  ${RED}✗${RESET} Node syntax error"
-    exit 1
-}
-echo -e "  ${GREEN}✓${RESET} Node server"
-
-# ── Build ────────────────────────────────────────────────────────────
-echo ""
-echo -e "  ${DIM}Building...${RESET}"
-
-echo -e "  ${DIM}  Dashboard (vite)...${RESET}"
-bun vite build >/dev/null 2>&1 || {
-    echo -e "  ${RED}✗${RESET} Vite build failed"
-    exit 1
-}
-echo -e "  ${GREEN}✓${RESET} Vite build"
-
-echo -e "  ${DIM}  Menu bar app (swiftc)...${RESET}"
-bash build.sh >/dev/null 2>&1 || {
-    echo -e "  ${RED}✗${RESET} Swift build failed"
-    exit 1
-}
-echo -e "  ${GREEN}✓${RESET} Swift build"
 
 # ── Bump version ─────────────────────────────────────────────────────
 echo ""
