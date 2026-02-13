@@ -17,7 +17,7 @@ passed() { echo -e "  ${GREEN}✓${RESET} $1"; }
 failed() { echo -e "  ${RED}✗${RESET} $1"; }
 skipped() { echo -e "  ${YELLOW}○${RESET} $1 ${DIM}(skipped)${RESET}"; }
 
-REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+REPO_DIR="$(git rev-parse --show-toplevel)"
 
 # ── Stash unstaged changes ───────────────────────────────────────────
 # This ensures we check exactly what's being committed, not what's in

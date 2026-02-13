@@ -14,7 +14,7 @@
     "format:check": "prettier --check .",
     "server": "node tilt-launcher.mjs",
     "release": "./release.sh",
-    "prepare": "cp hooks/pre-commit .git/hooks/pre-commit 2>/dev/null && chmod +x .git/hooks/pre-commit || true"
+    "prepare": "echo '#!/bin/bash\nexec \"$(git rev-parse --show-toplevel)/hooks/pre-commit\"' > .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit || true"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
