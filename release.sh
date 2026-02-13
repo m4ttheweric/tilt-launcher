@@ -10,12 +10,21 @@ RESET='\033[0m'
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# ── Parse flags ──────────────────────────────────────────────────────
+DRY_RUN=0
+if [[ "${1:-}" == "--dry-run" || "${1:-}" == "-n" ]]; then
+    DRY_RUN=1
+fi
+
 # ── Get current version ──────────────────────────────────────────────
 CURRENT=$(grep '"version"' package.json | head -1 | sed 's/.*"\([0-9]*\.[0-9]*\.[0-9]*\)".*/\1/')
 IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
 
 echo ""
 echo -e "${BOLD}▲ Tilt Launcher Release${RESET}"
+if [ "$DRY_RUN" -eq 1 ]; then
+    echo -e "  ${DIM}(dry run — no changes will be made)${RESET}"
+fi
 echo -e "${DIM}  ────────────────────────────────────${RESET}"
 echo -e "  Current version: ${BOLD}v${CURRENT}${RESET}"
 echo ""
@@ -69,6 +78,23 @@ bash "$SCRIPT_DIR/hooks/pre-commit" || {
     echo ""
     exit 1
 }
+
+# ── Dry run stops here ───────────────────────────────────────────────
+if [ "$DRY_RUN" -eq 1 ]; then
+    echo ""
+    echo -e "${DIM}  ────────────────────────────────────${RESET}"
+    echo -e "  ${GREEN}${BOLD}Dry run passed!${RESET}"
+    echo ""
+    echo -e "  All checks passed. If this were a real release:"
+    echo -e "    • Version would bump to ${BOLD}v${NEW_VERSION}${RESET}"
+    echo -e "    • package.json and build.sh would be updated"
+    echo -e "    • Tag ${BOLD}v${NEW_VERSION}${RESET} would be created and pushed"
+    echo -e "    • GitHub Actions would build DMGs"
+    echo ""
+    echo -e "  Run without ${BOLD}--dry-run${RESET} to release for real."
+    echo ""
+    exit 0
+fi
 
 # ── Bump version ─────────────────────────────────────────────────────
 echo ""
