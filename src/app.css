@@ -1,0 +1,12 @@
+@import 'tailwindcss';
+
+/* ── Custom theme tokens ─────────────────────────────────────────── */
+@theme {
+  --color-bg: #0f1117;
+  --color-surface: #1a1d27;
+  --color-surface-hover: #222632;
+  --color-border: #2a2e3a;
+  --color-border-active: #3a3e4a;
+  --color-text-dim: #8b8fa3;
+  --color-text-muted: #555a6e;
+}
