@@ -6,12 +6,11 @@
  * Usage:   node tilt-launcher.mjs
  * Config:  ~/.config/tilt-launcher/config.json (or TILT_LAUNCHER_CONFIG env var)
  *
- * Supports both HTTPS (with mkcert certs) and plain HTTP (default).
+ * Serves over plain HTTP.
  */
 
-import { createServer as createHttpsServer } from 'node:https';
-import { createServer as createHttpServer } from 'node:http';
-import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import { createServer } from 'node:http';
+import { readFileSync, existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -63,54 +62,30 @@ for (const env of config.environments) {
   });
 }
 
-// ── TLS (optional — uses HTTP if certs not found) ───────────────────
-let tlsOptions = null;
-const certsDir = join(__dirname, '.certs');
-try {
-  // Look for any .pem key/cert pair in .certs/
-  const keyFile = readdirSync(certsDir).find((f) => f.endsWith('-key.pem'));
-  const certFile = readdirSync(certsDir).find((f) => f.endsWith('.pem') && !f.endsWith('-key.pem'));
-  if (keyFile && certFile) {
-    tlsOptions = {
-      key: readFileSync(join(certsDir, keyFile)),
-      cert: readFileSync(join(certsDir, certFile)),
-    };
-  }
-} catch {
-  // No certs directory — run HTTP
-}
-
 // ── Service health checks ───────────────────────────────────────────
 const serviceHealth = {};
 ALL_SERVICES.forEach((s) => (serviceHealth[s.healthKey] = 'unknown'));
 
-function checkServiceHealth(service) {
+function tryConnect(hostname, port, path, timeout) {
   return new Promise((resolve) => {
-    const request = http.request(
-      {
-        hostname: '127.0.0.1',
-        port: service.port,
-        path: service.path,
-        timeout: 1500,
-        method: 'GET',
-      },
-      (res) => {
-        serviceHealth[service.healthKey] = 'up';
-        res.resume();
-        resolve();
-      },
-    );
-    request.on('error', () => {
-      serviceHealth[service.healthKey] = 'down';
-      resolve();
+    const request = http.request({ hostname, port, path, timeout, method: 'GET' }, (res) => {
+      res.resume();
+      resolve(true);
     });
+    request.on('error', () => resolve(false));
     request.on('timeout', () => {
-      serviceHealth[service.healthKey] = 'down';
       request.destroy();
-      resolve();
+      resolve(false);
     });
     request.end();
   });
+}
+
+async function checkServiceHealth(service) {
+  const up =
+    (await tryConnect('127.0.0.1', service.port, service.path, 1500)) ||
+    (await tryConnect('::1', service.port, service.path, 1500));
+  serviceHealth[service.healthKey] = up ? 'up' : 'down';
 }
 
 async function pollAllHealth() {
@@ -244,12 +219,12 @@ function sendJSON(res, data, status = 200) {
 }
 
 const handler = (req, res) => {
-  const proto = tlsOptions ? 'https' : 'http';
-  const url = new URL(req.url, `${proto}://localhost:${PORT}`);
+  const url = new URL(req.url, `http://localhost:${PORT}`);
 
   // API: config
   if (req.method === 'GET' && url.pathname === '/api/config') {
-    return sendJSON(res, config);
+    const dashboardUrl = config.dashboardUrl || `http://localhost:${PORT}`;
+    return sendJSON(res, { ...config, dashboardUrl });
   }
 
   // API: status
@@ -315,12 +290,11 @@ const handler = (req, res) => {
   res.end('Not found');
 };
 
-const server = tlsOptions ? createHttpsServer(tlsOptions, handler) : createHttpServer(handler);
+const server = createServer(handler);
 
 server.listen(PORT, '0.0.0.0', () => {
-  const proto = tlsOptions ? 'https' : 'http';
-  const dashUrl = config.dashboardUrl || `${proto}://localhost:${PORT}`;
-  console.log(`\n  🚀 Tilt Launcher running at ${dashUrl} (port ${PORT}, ${proto})`);
+  const dashUrl = config.dashboardUrl || `http://localhost:${PORT}`;
+  console.log(`\n  🚀 Tilt Launcher running at ${dashUrl} (port ${PORT})`);
   console.log(`  📋 Config: ${CONFIG_PATH}`);
   for (const env of config.environments) {
     const svcList = (env.services || []).map((s) => `${s.label}:${s.port}`).join(', ');

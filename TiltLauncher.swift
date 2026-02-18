@@ -94,14 +94,19 @@ struct TiltEnvironment: Codable {
 
 struct LauncherConfig: Codable {
     var port: Int
-    var dashboardUrl: String
+    var dashboardUrl: String?
     var environments: [TiltEnvironment]
+
+    var resolvedDashboardUrl: String {
+        if let url = dashboardUrl, !url.isEmpty { return url }
+        return "http://localhost:\(port)"
+    }
 }
 
 func loadConfig() -> LauncherConfig {
     let defaultConfig = LauncherConfig(
         port: 10400,
-        dashboardUrl: "http://localhost:10400",
+        dashboardUrl: nil,
         environments: []
     )
 
@@ -182,8 +187,10 @@ class PreferencesWindowController: NSWindowController, NSTableViewDataSource, NS
         contentView.addSubview(dashLabel)
 
         dashboardUrlField = NSTextField(frame: NSRect(x: 145, y: y, width: 550, height: 22))
-        dashboardUrlField.stringValue = config.dashboardUrl
+        dashboardUrlField.stringValue = config.dashboardUrl ?? ""
+        dashboardUrlField.placeholderString = config.resolvedDashboardUrl
         dashboardUrlField.font = NSFont.systemFont(ofSize: 12)
+        dashboardUrlField.autoresizingMask = [.width]
         contentView.addSubview(dashboardUrlField)
         y -= 40
 
@@ -196,17 +203,20 @@ class PreferencesWindowController: NSWindowController, NSTableViewDataSource, NS
         addEnvBtn.frame = NSRect(x: 630, y: y - 2, width: 30, height: 24)
         addEnvBtn.bezelStyle = .roundRect
         addEnvBtn.font = NSFont.systemFont(ofSize: 14, weight: .bold)
+        addEnvBtn.autoresizingMask = [.minXMargin]
         contentView.addSubview(addEnvBtn)
 
         let removeEnvBtn = NSButton(title: "−", target: self, action: #selector(removeEnvironment))
         removeEnvBtn.frame = NSRect(x: 665, y: y - 2, width: 30, height: 24)
         removeEnvBtn.bezelStyle = .roundRect
         removeEnvBtn.font = NSFont.systemFont(ofSize: 14, weight: .bold)
+        removeEnvBtn.autoresizingMask = [.minXMargin]
         contentView.addSubview(removeEnvBtn)
 
         y -= 25
 
         let envScroll = NSScrollView(frame: NSRect(x: 20, y: y - 140, width: 680, height: 140))
+        envScroll.autoresizingMask = [.width]
         envTable = NSTableView()
         envTable.dataSource = self
         envTable.delegate = self
@@ -218,6 +228,7 @@ class PreferencesWindowController: NSWindowController, NSTableViewDataSource, NS
             let col = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(identifier))
             col.title = title
             col.width = CGFloat(width)
+            col.resizingMask = .autoresizingMask
             envTable.addTableColumn(col)
         }
         envScroll.documentView = envTable
@@ -235,17 +246,20 @@ class PreferencesWindowController: NSWindowController, NSTableViewDataSource, NS
         addSvcBtn.frame = NSRect(x: 630, y: y - 2, width: 30, height: 24)
         addSvcBtn.bezelStyle = .roundRect
         addSvcBtn.font = NSFont.systemFont(ofSize: 14, weight: .bold)
+        addSvcBtn.autoresizingMask = [.minXMargin]
         contentView.addSubview(addSvcBtn)
 
         let removeSvcBtn = NSButton(title: "−", target: self, action: #selector(removeService))
         removeSvcBtn.frame = NSRect(x: 665, y: y - 2, width: 30, height: 24)
         removeSvcBtn.bezelStyle = .roundRect
         removeSvcBtn.font = NSFont.systemFont(ofSize: 14, weight: .bold)
+        removeSvcBtn.autoresizingMask = [.minXMargin]
         contentView.addSubview(removeSvcBtn)
 
         y -= 25
 
         let svcScroll = NSScrollView(frame: NSRect(x: 20, y: y - 140, width: 680, height: 140))
+        svcScroll.autoresizingMask = [.width]
         svcTable = NSTableView()
         svcTable.dataSource = self
         svcTable.delegate = self
@@ -257,6 +271,7 @@ class PreferencesWindowController: NSWindowController, NSTableViewDataSource, NS
             let col = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(identifier))
             col.title = title
             col.width = CGFloat(width)
+            col.resizingMask = .autoresizingMask
             svcTable.addTableColumn(col)
         }
         svcScroll.documentView = svcTable
@@ -270,6 +285,7 @@ class PreferencesWindowController: NSWindowController, NSTableViewDataSource, NS
         svcPlaceholder.alignment = .center
         svcPlaceholder.font = NSFont.systemFont(ofSize: 12)
         svcPlaceholder.textColor = .secondaryLabelColor
+        svcPlaceholder.autoresizingMask = [.width]
         contentView.addSubview(svcPlaceholder)
 
         y -= 160
@@ -279,12 +295,14 @@ class PreferencesWindowController: NSWindowController, NSTableViewDataSource, NS
         saveBtn.frame = NSRect(x: 510, y: 15, width: 190, height: 32)
         saveBtn.bezelStyle = .rounded
         saveBtn.keyEquivalent = "\r"
+        saveBtn.autoresizingMask = [.minXMargin]
         contentView.addSubview(saveBtn)
 
         let cancelBtn = NSButton(title: "Cancel", target: self, action: #selector(cancelPrefs))
         cancelBtn.frame = NSRect(x: 410, y: 15, width: 90, height: 32)
         cancelBtn.bezelStyle = .rounded
         cancelBtn.keyEquivalent = "\u{1b}"
+        cancelBtn.autoresizingMask = [.minXMargin]
         contentView.addSubview(cancelBtn)
     }
 
@@ -399,7 +417,7 @@ class PreferencesWindowController: NSWindowController, NSTableViewDataSource, NS
     }
 
     @objc func savePrefs() {
-        config.dashboardUrl = dashboardUrlField.stringValue
+        config.dashboardUrl = dashboardUrlField.stringValue.isEmpty ? nil : dashboardUrlField.stringValue
         saveConfig(config)
         onSave(config)
         window?.close()
@@ -417,6 +435,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var serverStatusItem: NSMenuItem!
     var config: LauncherConfig!
     var prefsController: PreferencesWindowController?
+    var healthTimer: Timer?
+    var serviceMenuItems: [String: NSMenuItem] = [:]
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         config = loadConfig()
@@ -436,6 +456,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func buildMenu() {
+        serviceMenuItems.removeAll()
         let menu = NSMenu()
 
         let header = NSMenuItem(title: "Tilt Launcher", action: nil, keyEquivalent: "")
@@ -467,12 +488,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let tiltItem = NSMenuItem(title: "Tilt Dashboard — :\(env.tiltPort)", action: #selector(openURL(_:)), keyEquivalent: "")
             tiltItem.target = self
             tiltItem.representedObject = "http://localhost:\(env.tiltPort)"
+            tiltItem.image = tiltIcon(for: "unknown")
+            serviceMenuItems["\(env.id):tilt"] = tiltItem
             menu.addItem(tiltItem)
 
             for svc in env.services {
                 let item = NSMenuItem(title: "\(svc.label) — :\(svc.port)", action: #selector(openURL(_:)), keyEquivalent: "")
                 item.target = self
                 item.representedObject = "http://localhost:\(svc.port)"
+                item.image = statusDot(for: "unknown")
+                serviceMenuItems["\(env.id):\(svc.id)"] = item
                 menu.addItem(item)
             }
 
@@ -508,7 +533,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = menu
     }
 
+    func killOrphanedServer() {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+        task.arguments = ["-f", "tilt-launcher\\.mjs"]
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = FileHandle.nullDevice
+        guard (try? task.run()) != nil else { return }
+        task.waitUntilExit()
+
+        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        for line in output.split(separator: "\n") {
+            if let pid = pid_t(line.trimmingCharacters(in: .whitespaces)) {
+                kill(pid, SIGTERM)
+            }
+        }
+    }
+
     func startServer() {
+        killOrphanedServer()
         let nodePath = NODE_PATH
         let process = Process()
 
@@ -554,24 +598,93 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func updateStatus(running: Bool) {
         if running {
-            serverStatusItem.title = "● Server Running"
             serverStatusItem.attributedTitle = NSAttributedString(
-                string: "● Server Running",
+                string: "Server Running",
                 attributes: [.foregroundColor: NSColor.controlTextColor, .font: NSFont.systemFont(ofSize: 13, weight: .medium)]
             )
+            serverStatusItem.image = statusDot(for: "up")
             statusItem.button?.title = "▲"
+            startHealthPolling()
         } else {
-            serverStatusItem.title = "○ Server Stopped"
             serverStatusItem.attributedTitle = NSAttributedString(
-                string: "○ Server Stopped",
+                string: "Server Stopped",
                 attributes: [.foregroundColor: NSColor.secondaryLabelColor, .font: NSFont.systemFont(ofSize: 13, weight: .medium)]
             )
+            serverStatusItem.image = statusDot(for: "down")
             statusItem.button?.title = "△"
+            stopHealthPolling()
         }
     }
 
+    func statusDot(for status: String) -> NSImage {
+        let color: NSColor = status == "up" ? .systemGreen : .tertiaryLabelColor
+        let size = NSSize(width: 8, height: 8)
+        let image = NSImage(size: size, flipped: false) { rect in
+            color.setFill()
+            NSBezierPath(ovalIn: rect).fill()
+            return true
+        }
+        image.isTemplate = false
+        return image
+    }
+
+    func tiltIcon(for status: String) -> NSImage {
+        let color: NSColor = status == "up" ? .systemBlue : .tertiaryLabelColor
+        let size = NSSize(width: 10, height: 10)
+        let image = NSImage(size: size, flipped: true) { rect in
+            let inset = rect.insetBy(dx: 1, dy: 1)
+            let path = NSBezierPath()
+            path.move(to: NSPoint(x: inset.midX, y: inset.minY))
+            path.line(to: NSPoint(x: inset.maxX, y: inset.maxY))
+            path.line(to: NSPoint(x: inset.minX, y: inset.maxY))
+            path.close()
+            color.setFill()
+            path.fill()
+            return true
+        }
+        image.isTemplate = false
+        return image
+    }
+
+    func startHealthPolling() {
+        healthTimer?.invalidate()
+        healthTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            self?.pollHealth()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            self?.pollHealth()
+        }
+    }
+
+    func stopHealthPolling() {
+        healthTimer?.invalidate()
+        healthTimer = nil
+        for (key, item) in serviceMenuItems {
+            item.image = key.hasSuffix(":tilt") ? tiltIcon(for: "unknown") : statusDot(for: "unknown")
+        }
+    }
+
+    func pollHealth() {
+        guard let url = URL(string: "http://localhost:\(config.port)/api/status") else { return }
+
+        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+            guard let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let health = json["health"] as? [String: String] else { return }
+
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                for (key, item) in self.serviceMenuItems {
+                    let status = health[key] ?? "unknown"
+                    item.image = key.hasSuffix(":tilt") ? self.tiltIcon(for: status) : self.statusDot(for: status)
+                }
+            }
+        }.resume()
+    }
+
     @objc func openDashboard() {
-        NSWorkspace.shared.open(URL(string: config.dashboardUrl)!)
+        guard let url = URL(string: config.resolvedDashboardUrl) else { return }
+        NSWorkspace.shared.open(url)
     }
 
     @objc func openURL(_ sender: NSMenuItem) {
