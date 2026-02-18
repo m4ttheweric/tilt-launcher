@@ -2,7 +2,7 @@
 
 A native macOS menu bar app and web dashboard for managing [Tilt](https://tilt.dev/) development environments.
 
-- **Menu bar app** (▲) — quick links to Tilt dashboards, services, preferences, and Launch at Login
+- **Menu bar app** (▲) — live health status indicators, quick links to Tilt dashboards and services, preferences, and Launch at Login
 - **Web dashboard** — start/stop environments, live health checks, uptime tracking, log streaming
 - **Configurable** — manage multiple Tilt environments across different repos via JSON config or the built-in preferences UI
 - **Distributable** — installable via DMG or `./install.sh`, builds for both Apple Silicon and Intel
@@ -43,7 +43,6 @@ Edit `~/.config/tilt-launcher/config.json`:
 ```json
 {
   "port": 10400,
-  "dashboardUrl": "http://localhost:10400",
   "environments": [
     {
       "id": "my-project",
@@ -89,25 +88,26 @@ The `.app` is self-contained: server, dashboard, and config template are bundled
 ## Menu Bar Features
 
 - **Open Dashboard** — opens the web UI in your browser
-- **Tilt Dashboards** — per-environment links to Tilt UIs
-- **Local Apps** — per-environment service links
-- **Server status** — running/stopped indicator
+- **Tilt Dashboards** — per-environment links to Tilt UIs, with blue triangle status indicators
+- **Service Links** — per-environment service links, with green/grey health dots
+- **Server status** — green/grey dot showing running/stopped
 - **Restart Server** — restart the Node server without affecting Tilt
 - **Launch at Login** — toggle auto-start on login (uses SMAppService)
-- **Preferences** — edit environments and services in a native macOS window
+- **Preferences** — edit environments and services in a resizable native macOS window
 
-## HTTPS Setup (Optional)
+Health indicators poll `/api/status` every 5 seconds and update live, even while the menu is open.
 
-By default the dashboard runs on plain HTTP at `http://localhost:10400`. The installer offers to set up HTTPS, or you can do it manually:
+## Custom Dashboard URL (Optional)
 
-```bash
-brew install mkcert && mkcert -install
-mkdir -p .certs && cd .certs && mkcert local.dev && cd ..
-echo '127.0.0.1	local.dev' | sudo tee -a /etc/hosts
-echo "rdr pass on lo0 inet proto tcp from any to 127.0.0.1 port 443 -> 127.0.0.1 port 10400" | sudo pfctl -ef -
+By default the dashboard runs on plain HTTP at `http://localhost:10400`. If you want to use a custom domain, set `dashboardUrl` in your config:
+
+```json
+{
+  "dashboardUrl": "http://my-custom-domain:10400"
+}
 ```
 
-Update `dashboardUrl` in your config to `https://local.dev`. The server auto-detects certs in `.certs/` and switches to HTTPS.
+When `dashboardUrl` is omitted or empty, the app defaults to `http://localhost:{port}`. The preferences UI shows the resolved default as placeholder text.
 
 ## Development
 
@@ -154,7 +154,7 @@ Both builds output to temp directories — no side effects on the running server
 │           ├── HealthBar.svelte Health status chips
 │           ├── EnvCard.svelte   Environment card with controls
 │           └── LogPanel.svelte  Tabbed log viewer
-├── tilt-launcher.mjs            Node.js server (HTTP/HTTPS, API, static)
+├── tilt-launcher.mjs            Node.js HTTP server (API + static files)
 ├── TiltLauncher.swift           macOS menu bar app (AppKit + SMAppService)
 ├── config.example.json          Example config (copied on first install)
 ├── build.sh                     Swift compilation + resource bundling
@@ -171,22 +171,20 @@ Both builds output to temp directories — no side effects on the running server
 
 ## Releasing
 
-Tag a version to trigger the GitHub Actions workflow:
+Use the release script to bump version, run all checks, and push:
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+./release.sh           # interactive: choose patch/minor/major
+./release.sh --dry-run # validate without releasing
 ```
 
-This builds DMGs for both Apple Silicon and Intel and attaches them to a GitHub Release.
+This bumps `package.json` and `build.sh`, commits, tags `vX.Y.Z`, and pushes. The tag triggers GitHub Actions which builds DMGs for both Apple Silicon and Intel and attaches them to a GitHub Release.
 
 ## Uninstall
 
 ```bash
 rm -rf /Applications/TiltLauncher.app
 rm -rf ~/.config/tilt-launcher
-# If HTTPS was set up:
-sudo sed -i '' '/YOUR_DOMAIN/d' /etc/hosts
 ```
 
 ## License

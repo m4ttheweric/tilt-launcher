@@ -4,9 +4,9 @@
 
 Tilt Launcher is a macOS developer tool for managing Tilt development environments. Three layers:
 
-1. **TiltLauncher.swift** — Native macOS menu bar app (▲). Compiled with `swiftc` (no Xcode). Spawns the Node server, provides quick links, preferences UI, server restart, and Launch at Login toggle.
+1. **TiltLauncher.swift** — Native macOS menu bar app (▲). Compiled with `swiftc` (no Xcode). Spawns the Node server, provides quick links with live health indicators, preferences UI, server restart, and Launch at Login toggle.
 
-2. **tilt-launcher.mjs** — Zero-dependency Node.js server. Serves the Svelte dashboard from `dist/`, provides REST APIs for start/stop, runs health checks. Supports both HTTP and HTTPS (auto-detects mkcert certs in `.certs/`).
+2. **tilt-launcher.mjs** — Zero-dependency Node.js HTTP server. Serves the Svelte dashboard from `dist/`, provides REST APIs for start/stop, runs health checks (IPv4 + IPv6).
 
 3. **src/** — Svelte 5 + Tailwind CSS v4 + TypeScript 7 dashboard. Built to `dist/` by Vite. Components: App, HealthBar, EnvCard, LogPanel.
 
@@ -15,7 +15,7 @@ Tilt Launcher is a macOS developer tool for managing Tilt development environmen
 | File                            | Language    | Purpose                                                                      |
 | ------------------------------- | ----------- | ---------------------------------------------------------------------------- |
 | `TiltLauncher.swift`            | Swift 6     | Menu bar app. AppKit, SMAppService for login items. Single file, `swiftc`.   |
-| `tilt-launcher.mjs`             | Node.js ESM | HTTPS/HTTP server. Zero npm deps. Reads config from env var or default path. |
+| `tilt-launcher.mjs`             | Node.js ESM | HTTP server. Zero npm deps. Reads config from env var or default path.       |
 | `src/App.svelte`                | Svelte 5    | Root dashboard component. Fetches `/api/config`, polls `/api/status`.        |
 | `src/lib/components/`           | Svelte 5    | HealthBar, EnvCard, LogPanel — all typed via `$props()`.                     |
 | `src/lib/types.ts`              | TypeScript  | Config, Environment, EnvStatus, StatusResponse interfaces.                   |
@@ -24,7 +24,7 @@ Tilt Launcher is a macOS developer tool for managing Tilt development environmen
 | `src/app.css`                   | CSS         | Tailwind v4 `@import` + custom `@theme` tokens.                              |
 | `config.example.json`           | JSON        | Example config shipped with repo. Copied to user config on first launch.     |
 | `build.sh`                      | Bash        | Compiles Swift, bundles server + dist + config into .app/Contents/Resources. |
-| `install.sh`                    | Bash        | Full installer: prereqs, deps, build, install, config, optional HTTPS.       |
+| `install.sh`                    | Bash        | Full installer: prereqs, deps, build, install, config.                       |
 | `package-dmg.sh`                | Bash        | Creates distributable DMG with Applications symlink.                         |
 | `hooks/pre-commit`              | Bash        | 8-check pre-commit hook. Auto-installed via `prepare` script.                |
 | `.github/workflows/release.yml` | YAML        | Builds DMGs for arm64 + x86_64, creates GitHub Release on tag push.          |
@@ -84,9 +84,9 @@ Zero hardcoded paths:
 
 In development (running from repo, not installed .app), falls back to the repo directory.
 
-## HTTP vs HTTPS
+## HTTP
 
-Auto-detected: if `.certs/` (in Resources or repo) contains `*-key.pem` + `*.pem`, uses `node:https`. Otherwise `node:http`. No config flag needed.
+The server always runs plain HTTP on the configured port. `dashboardUrl` is optional — when omitted, defaults to `http://localhost:{port}`.
 
 ## Distribution
 
