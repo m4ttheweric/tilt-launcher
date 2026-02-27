@@ -2,18 +2,22 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+APP_BUNDLE="${1:-}"
+DMG_PATH_ARG="${2:-}"
 APP_NAME="TiltLauncher"
-APP_BUNDLE="$SCRIPT_DIR/$APP_NAME.app"
-DMG_NAME="TiltLauncher"
-DMG_PATH="$SCRIPT_DIR/$DMG_NAME.dmg"
+if [ -z "$APP_BUNDLE" ]; then
+    echo "Usage: ./package-dmg.sh <path-to-app-bundle> [output-dmg-path]"
+    exit 1
+fi
+DMG_PATH="${DMG_PATH_ARG:-$SCRIPT_DIR/$APP_NAME.dmg}"
 VOLUME_NAME="Tilt Launcher"
 
 if [ ! -d "$APP_BUNDLE" ]; then
-    echo "❌ $APP_BUNDLE not found. Run ./build.sh first."
+    echo "❌ $APP_BUNDLE not found."
     exit 1
 fi
 
-echo "Packaging $DMG_NAME.dmg..."
+echo "Packaging $(basename "$DMG_PATH")..."
 
 # Clean previous DMG
 rm -f "$DMG_PATH"

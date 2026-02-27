@@ -8,10 +8,8 @@
       "tiltfile": "Tiltfile",
       "tiltPort": 10350,
       "description": "Local development environment",
-      "services": [
-        { "id": "backend", "label": "Backend", "port": 4000, "path": "/" },
-        { "id": "frontend", "label": "Frontend", "port": 3000, "path": "/" }
-      ]
+      "selectedResources": [],
+      "cachedResources": []
     }
   ]
 }

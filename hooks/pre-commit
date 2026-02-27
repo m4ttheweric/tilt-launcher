@@ -91,61 +91,6 @@ else
     exit 1
 fi
 
-# ── 4. Swift type check ─────────────────────────────────────────────
-if [ -f "$REPO_DIR/TiltLauncher.swift" ]; then
-    echo -e "  ${DIM}Type checking (swift)...${RESET}"
-    SWIFT_OUTPUT=$(swiftc -typecheck "$REPO_DIR/TiltLauncher.swift" -framework Cocoa -framework ServiceManagement 2>&1)
-    if [ $? -eq 0 ]; then
-        passed "Swift types"
-    else
-        failed "Swift types"
-        echo ""
-        echo "$SWIFT_OUTPUT" | grep "error:" | head -10 | sed 's/^/    /'
-        TOTAL=$(echo "$SWIFT_OUTPUT" | grep -c "error:" || true)
-        [ "$TOTAL" -gt 10 ] && echo -e "    ${DIM}... and $((TOTAL - 10)) more${RESET}"
-        echo ""
-        exit 1
-    fi
-fi
-
-# ── 5. SwiftLint (optional) ─────────────────────────────────────────
-if [ -f "$REPO_DIR/TiltLauncher.swift" ] && command -v swiftlint &>/dev/null; then
-    echo -e "  ${DIM}Linting (swiftlint)...${RESET}"
-    SWIFTLINT_OUTPUT=$(cd "$REPO_DIR" && swiftlint lint --quiet TiltLauncher.swift 2>&1)
-    if [ -z "$SWIFTLINT_OUTPUT" ]; then
-        passed "SwiftLint"
-    else
-        ERR_COUNT=$(echo "$SWIFTLINT_OUTPUT" | grep -c "error:" || true)
-        WARN_COUNT=$(echo "$SWIFTLINT_OUTPUT" | grep -c "warning:" || true)
-        if [ "$ERR_COUNT" -gt 0 ]; then
-            failed "SwiftLint ($ERR_COUNT errors, $WARN_COUNT warnings)"
-            echo ""
-            echo "$SWIFTLINT_OUTPUT" | grep "error:" | head -10 | sed 's/^/    /'
-            echo ""
-            exit 1
-        else
-            passed "SwiftLint ${DIM}($WARN_COUNT warnings)${RESET}"
-        fi
-    fi
-elif [ -f "$REPO_DIR/TiltLauncher.swift" ]; then
-    skipped "SwiftLint (not installed — brew install swiftlint)"
-fi
-
-# ── 6. Node server syntax ───────────────────────────────────────────
-if [ -f "$REPO_DIR/tilt-launcher.mjs" ]; then
-    echo -e "  ${DIM}Syntax check (node)...${RESET}"
-    NODE_OUTPUT=$(node --check "$REPO_DIR/tilt-launcher.mjs" 2>&1)
-    if [ $? -eq 0 ]; then
-        passed "Node server syntax"
-    else
-        failed "Node server syntax"
-        echo ""
-        echo "$NODE_OUTPUT" | head -5 | sed 's/^/    /'
-        echo ""
-        exit 1
-    fi
-fi
-
 # ━━ Builds ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 echo ""
 echo -e "  ${BOLD}Builds${RESET}"
@@ -168,34 +113,23 @@ else
 fi
 rm -rf "$VITE_TMP"
 
-# ── 8. Swift build (.app) ───────────────────────────────────────────
-if [ -f "$REPO_DIR/TiltLauncher.swift" ]; then
-    echo -e "  ${DIM}Building menu bar app (swiftc)...${RESET}"
-
-    ARCH=$(uname -m)
-    TARGET="${ARCH}-apple-macosx14.0"
-    SWIFT_TMP=$(mktemp -d)
-
-    SWIFT_BUILD_OUTPUT=$(swiftc -O \
-        -o "$SWIFT_TMP/TiltLauncher" \
-        "$REPO_DIR/TiltLauncher.swift" \
-        -framework Cocoa \
-        -framework ServiceManagement \
-        -target "$TARGET" 2>&1)
-
-    if [ $? -eq 0 ]; then
-        passed "Swift build ${DIM}($ARCH)${RESET}"
-    else
-        failed "Swift build"
-        echo ""
-        echo "$SWIFT_BUILD_OUTPUT" | grep "error:" | head -10 | sed 's/^/    /'
-        TOTAL=$(echo "$SWIFT_BUILD_OUTPUT" | grep -c "error:" || true)
-        [ "$TOTAL" -gt 10 ] && echo -e "    ${DIM}... and $((TOTAL - 10)) more${RESET}"
-        echo ""
-        rm -rf "$SWIFT_TMP"
-        exit 1
-    fi
-    rm -rf "$SWIFT_TMP"
+# ── 8. Electron app package check ───────────────────────────────────
+echo -e "  ${DIM}Packaging Electron app...${RESET}"
+ARCH=$(uname -m)
+if [ "$ARCH" = "x86_64" ]; then
+    PKG_ARCH="x64"
+else
+    PKG_ARCH="arm64"
+fi
+PKG_OUTPUT=$(cd "$REPO_DIR" && bun run package:app --arch "$PKG_ARCH" 2>&1)
+if [ $? -eq 0 ]; then
+    passed "Electron package ${DIM}($PKG_ARCH)${RESET}"
+else
+    failed "Electron package"
+    echo ""
+    echo "$PKG_OUTPUT" | grep -iE "error|failed|cannot" | head -10 | sed 's/^/    /'
+    echo ""
+    exit 1
 fi
 
 echo -e "\n${DIM}  ────────────────────────────────────${RESET}"

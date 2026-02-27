@@ -1,4 +1,6 @@
 dist/
+dist-app/
+out/
 node_modules/
 TiltLauncher.app/
 *.swift
