@@ -1,0 +1,14 @@
+export const DEFAULT_CONFIG_PORT = 10400;
+export const DEFAULT_TILT_PORT_START = 10350;
+
+export const DISCOVERY_TIMEOUT_MS = 30000;
+export const DISCOVERY_PROGRESS_MAX_SECONDS = 30;
+
+export const LOGS_MIN_HEIGHT_PX = 160;
+export const LOGS_MAX_HEIGHT_RATIO = 0.6;
+
+export const LEFT_PANE_MIN_PERCENT = 20;
+export const LEFT_PANE_MAX_PERCENT = 90;
+
+export const MAIN_PANE_MIN_WIDTH_PX = 280;
+export const BROWSER_PANE_MIN_WIDTH_PX = 320;
