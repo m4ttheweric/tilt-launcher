@@ -16,7 +16,7 @@
     discoveryMaxSeconds: number;
     discoverResult: DiscoverResult | null;
     selectedDiscovery: Record<string, boolean>;
-    onTiltfilePick: (path: string, isSymlink: boolean) => void;
+    onTiltfilePick: (path: string, isSymlink: boolean, realPath?: string) => void;
     onNewEnvNameChange: (value: string) => void;
     onNewEnvDescriptionChange: (value: string) => void;
     onNewTiltPortChange: (value: number) => void;

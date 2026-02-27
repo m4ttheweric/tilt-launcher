@@ -12,7 +12,7 @@
   let {
     onpick,
   }: {
-    onpick: (path: string, isSymlink: boolean) => void;
+    onpick: (path: string, isSymlink: boolean, realPath?: string) => void;
   } = $props();
 
   let inputEl: HTMLInputElement | null = $state(null);
@@ -133,7 +133,8 @@
         // listing directly, no extra IPC needed.
         inputValue = picked; // symlink location (~/… form)
         pickedRealPath = entry.realPath; // real path returned by fs (absolute)
-        onpick(picked, true);
+        const absolute = picked.startsWith('~/') && homePath ? homePath + picked.slice(1) : picked;
+        onpick(absolute, true, entry.realPath);
       } else {
         // Not a symlink as listed — run a reverse scan in case the user navigated
         // to the real file while a symlink exists somewhere else.
@@ -144,7 +145,7 @@
           if (result.isSymlink && result.realPath) {
             pickedRealPath = result.realPath;
           }
-          onpick(result.path, result.isSymlink);
+          onpick(result.path, result.isSymlink, result.realPath);
         });
       }
       return;
@@ -224,7 +225,13 @@
   <!-- Input + dropdown anchored together -->
   <div class="relative">
     <div
-      class={`border font-mono text-sm ${invalid ? 'animate-shake border-rose-500' : dirError ? 'border-amber-500/60' : 'border-input'}`}
+      class={`border font-mono text-sm ${
+        invalid
+          ? 'animate-shake border-rose-500/70 dark:border-rose-500/50'
+          : dirError
+            ? 'border-amber-500/70 dark:border-amber-500/50'
+            : 'border-input'
+      }`}
     >
       <input
         bind:this={inputEl}
@@ -263,7 +270,7 @@
     {#if open && (displayEntries.length > 0 || loading)}
       <div
         bind:this={listEl}
-        class="absolute top-full right-0 left-0 z-[70] max-h-64 overflow-y-auto border border-border bg-popover shadow-lg"
+        class="absolute top-full right-0 left-0 z-70 max-h-64 overflow-y-auto border border-border bg-popover shadow-lg"
       >
         {#if loading && displayEntries.length === 0}
           <div class="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
@@ -283,7 +290,11 @@
                 : `${listDir}${entry.name}`}
             <button
               type="button"
-              class={`flex w-full items-center gap-2.5 px-3 py-1.5 text-left ${i === activeIndex ? 'bg-muted' : ''}`}
+              class={`flex w-full items-center gap-2.5 px-3 py-1.5 text-left transition-colors ${
+                i === activeIndex
+                  ? 'bg-accent text-accent-foreground'
+                  : 'text-popover-foreground hover:bg-accent/70 hover:text-accent-foreground'
+              }`}
               onmouseenter={() => (activeIndex = i)}
               onmousedown={(e) => {
                 e.preventDefault();
@@ -323,16 +334,20 @@
 
   <!-- Feedback — flush against the input border, no gap -->
   {#if invalid && invalidMsg}
-    <p class="border border-t-0 border-rose-500/40 bg-rose-500/5 px-2.5 py-1 text-[11px] text-rose-400">
+    <p
+      class="border border-t-0 border-rose-500/50 bg-rose-500/8 px-2.5 py-1 text-[11px] text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-300"
+    >
       {invalidMsg}
     </p>
   {:else if dirError}
-    <p class="border border-t-0 border-amber-500/40 bg-amber-500/5 px-2.5 py-1 text-[11px] text-amber-400">
+    <p
+      class="border border-t-0 border-amber-500/50 bg-amber-500/8 px-2.5 py-1 text-[11px] text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
+    >
       {dirError}
     </p>
   {:else if pickedRealPath}
     <div
-      class="flex items-center gap-2 border border-t-0 border-border/40 bg-muted/30 px-2.5 py-1.5 text-[11px] text-muted-foreground/70"
+      class="flex items-center gap-2 border border-t-0 border-border/50 bg-muted/35 px-2.5 py-1.5 text-[11px] text-muted-foreground/80 dark:border-border/40 dark:bg-muted/30 dark:text-muted-foreground/70"
     >
       <Link2 class="h-3 w-3 shrink-0" />
       <span class="shrink-0 text-muted-foreground/50">symlink</span>

@@ -150,22 +150,39 @@ export class TiltManagerSDK {
     const timeoutMs = input.timeoutMs ?? 30000;
     const logsOut: string[] = [];
 
-    const discoveryProc = spawn('tilt', ['up', '-f', tiltfile, '--port', String(input.tiltPort)], {
-      cwd: repoDir,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, PWD: repoDir },
-    });
+    let discoveryProc: ChildProcess;
+    try {
+      discoveryProc = spawn('tilt', ['up', '-f', tiltfile, '--port', String(input.tiltPort)], {
+        cwd: repoDir,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, PWD: repoDir },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown process launch error';
+      return {
+        ok: false,
+        resources: [],
+        logs: logsOut,
+        error: `Failed to start Tilt for discovery: ${message}`,
+      };
+    }
+    let spawnError: Error | null = null;
 
-    discoveryProc.stdout.on('data', (chunk: Buffer) => {
+    discoveryProc.stdout?.on('data', (chunk: Buffer) => {
       logsOut.push(...chunk.toString().split('\n').filter(Boolean));
     });
-    discoveryProc.stderr.on('data', (chunk: Buffer) => {
+    discoveryProc.stderr?.on('data', (chunk: Buffer) => {
       logsOut.push(...chunk.toString().split('\n').filter(Boolean));
+    });
+    discoveryProc.once('error', (error: Error) => {
+      spawnError = error;
+      logsOut.push(`[launcher] ${error.message}`);
     });
 
     const startedAt = Date.now();
     let resources: CachedResource[] | null = null;
     while (Date.now() - startedAt < timeoutMs) {
+      if (spawnError) break;
       await new Promise((resolve) => setTimeout(resolve, 2000));
       const env: Environment = {
         id: 'discovery',
@@ -178,6 +195,15 @@ export class TiltManagerSDK {
       };
       resources = await this.readTiltResources(env);
       if (resources && resources.length > 0) break;
+    }
+
+    if (spawnError) {
+      return {
+        ok: false,
+        resources: [],
+        logs: logsOut,
+        error: `Failed to start Tilt for discovery: ${(spawnError as Error)?.message ?? 'Unknown error'}`,
+      };
     }
 
     void this.runCommand('tilt', ['down', '--port', String(input.tiltPort)], repoDir);
