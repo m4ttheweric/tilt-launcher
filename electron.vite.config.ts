@@ -21,6 +21,10 @@ export default defineConfig({
   },
   renderer: {
     root: '.',
+    server: {
+      // Use an ephemeral dev port to avoid collisions with Tilt/service ports.
+      port: 5200,
+    },
     resolve: {
       alias: {
         $lib: resolve('./src/lib'),

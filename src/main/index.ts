@@ -12,40 +12,24 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { spawn, type ChildProcess } from 'node:child_process';
 import { basename, dirname, join, relative } from 'node:path';
 import { homedir } from 'node:os';
-import type {
-  CachedResource,
-  Config,
-  DirEntry,
-  DiscoverResult,
-  Environment,
-  PickedTiltfile,
-  ReadDirResult,
-  ResourceRow,
-  StatusResponse,
-} from '../lib/types.ts';
+import type { Config, DirEntry, PickedTiltfile, ReadDirResult, ResourceRow, StatusResponse } from '../lib/types.ts';
+import { TiltManagerSDK } from './tiltManagerSDK.ts';
 
 type EnvState = 'running' | 'starting' | 'stopped';
 
 const CONFIG_DIR = join(homedir(), '.config', 'tilt-launcher');
 const CONFIG_PATH = process.env.TILT_LAUNCHER_CONFIG || join(CONFIG_DIR, 'config.json');
 const DEFAULT_PORT = 10400;
-const MAX_LOG_LINES = 800;
-
-const processes = new Map<string, ChildProcess>();
-const logs = new Map<string, string[]>();
-const startTimes = new Map<string, number>();
-const discoveredResources = new Map<string, CachedResource[]>();
-const healthByKey = new Map<string, ResourceRow['health']>();
-const newResourceCount = new Map<string, number>();
 
 let config: Config = loadConfig();
-let pollHandle: NodeJS.Timeout | null = null;
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let quitting = false;
+const tiltManager = new TiltManagerSDK(config, {
+  onStatus: (snapshot) => emitStatus(snapshot),
+});
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -111,168 +95,6 @@ function writeConfig(next: Config): void {
   const tmpPath = `${CONFIG_PATH}.tmp`;
   writeFileSync(tmpPath, JSON.stringify(next, null, 2));
   renameSync(tmpPath, CONFIG_PATH);
-}
-
-function appendLog(envId: string, line: string): void {
-  const existing = logs.get(envId) ?? [];
-  existing.push(line);
-  logs.set(envId, existing.slice(-MAX_LOG_LINES));
-}
-
-function envById(envId: string): Environment | undefined {
-  return config.environments.find((env) => env.id === envId);
-}
-
-function getEnvState(env: Environment): EnvState {
-  const proc = processes.get(env.id);
-  if (proc && proc.exitCode === null && !proc.killed) return 'starting';
-  const resources = discoveredResources.get(env.id) ?? [];
-  if (resources.some((resource) => resource.runtimeStatus === 'ok')) return 'running';
-  return 'stopped';
-}
-
-function parseEndpoint(endpoint?: string): { port?: number; path?: string } {
-  if (!endpoint) return {};
-  try {
-    const url = new URL(endpoint);
-    return {
-      port: Number(url.port || 80),
-      path: url.pathname || '/',
-    };
-  } catch {
-    return {};
-  }
-}
-
-function categoryFor(resource: CachedResource): string {
-  if (resource.category) return resource.category;
-  if (resource.runtimeStatus === 'not_applicable') return 'on-demand';
-  return 'services';
-}
-
-async function runCommand(command: string, args: string[], cwd: string): Promise<{ code: number; output: string }> {
-  return await new Promise((resolve) => {
-    const child = spawn(command, args, { cwd, env: { ...process.env, PWD: cwd } });
-    let output = '';
-    child.stdout.on('data', (chunk: Buffer) => {
-      output += chunk.toString();
-    });
-    child.stderr.on('data', (chunk: Buffer) => {
-      output += chunk.toString();
-    });
-    child.on('close', (code) => resolve({ code: code ?? 1, output }));
-    child.on('error', (err: Error) => resolve({ code: 1, output: `${output}\n${err.message}` }));
-  });
-}
-
-async function readTiltResources(env: Environment): Promise<CachedResource[] | null> {
-  const result = await runCommand(
-    'tilt',
-    ['get', 'uiresources', '-o', 'json', '--port', String(env.tiltPort)],
-    env.repoDir,
-  );
-  if (result.code !== 0) return null;
-  try {
-    const parsed = JSON.parse(result.output) as {
-      items?: Array<{
-        metadata?: { name?: string; labels?: Record<string, string> };
-        status?: {
-          endpointLinks?: Array<{ url?: string }>;
-          runtimeStatus?: string;
-          specs?: Array<{ type?: string }>;
-        };
-      }>;
-    };
-    return (parsed.items ?? [])
-      .filter((item) => item.metadata?.name && item.metadata.name !== '(Tiltfile)')
-      .map((item) => {
-        const endpoint = item.status?.endpointLinks?.[0]?.url;
-        const parsedEndpoint = parseEndpoint(endpoint);
-        const labels = item.metadata?.labels ? Object.keys(item.metadata.labels) : [];
-        return {
-          name: item.metadata?.name ?? 'unknown',
-          label: item.metadata?.name ?? 'unknown',
-          category: labels[0] ?? 'services',
-          type: item.status?.specs?.[0]?.type ?? 'unknown',
-          endpoint,
-          port: parsedEndpoint.port,
-          path: parsedEndpoint.path,
-          runtimeStatus: item.status?.runtimeStatus ?? 'unknown',
-        };
-      });
-  } catch {
-    return null;
-  }
-}
-
-async function tryConnect(hostname: string, port: number, path = '/'): Promise<boolean> {
-  return await new Promise((resolve) => {
-    const req = spawn('curl', ['-sS', '-o', '/dev/null', '-m', '1.5', `http://${hostname}:${port}${path}`], {
-      stdio: 'ignore',
-    });
-    req.on('close', (code) => resolve(code === 0));
-    req.on('error', () => resolve(false));
-  });
-}
-
-async function computeHealth(resource: CachedResource): Promise<ResourceRow['health']> {
-  if (!resource.port) return 'unknown';
-  const path = resource.path ?? '/';
-  const ok = (await tryConnect('127.0.0.1', resource.port, path)) || (await tryConnect('::1', resource.port, path));
-  return ok ? 'up' : 'down';
-}
-
-function getDisplayRows(env: Environment): ResourceRow[] {
-  const selected = env.selectedResources ?? [];
-  const discovered = discoveredResources.get(env.id) ?? [];
-  const cached = env.cachedResources ?? [];
-  const byName = new Map<string, CachedResource>();
-  for (const resource of cached) byName.set(resource.name, resource);
-  for (const resource of discovered) byName.set(resource.name, resource);
-
-  return selected.map((name) => {
-    const key = `${env.id}:${name}`;
-    const found = byName.get(name);
-    if (!found) {
-      return {
-        key,
-        name,
-        label: name,
-        category: 'services',
-        runtimeStatus: 'missing',
-        health: 'missing',
-        exists: false,
-        error: `Resource '${name}' not found in Tiltfile output.`,
-      };
-    }
-    return {
-      key,
-      name: found.name,
-      label: found.label || found.name,
-      category: categoryFor(found),
-      endpoint: found.endpoint,
-      port: found.port,
-      path: found.path,
-      runtimeStatus: found.runtimeStatus ?? 'unknown',
-      health: healthByKey.get(key) ?? 'unknown',
-      exists: true,
-    };
-  });
-}
-
-function currentStatusSnapshot(): StatusResponse {
-  const envs: StatusResponse['envs'] = {};
-  for (const env of config.environments) {
-    envs[env.id] = {
-      status: getEnvState(env),
-      logs: logs.get(env.id) ?? [],
-      tiltPort: env.tiltPort,
-      uptime: startTimes.has(env.id) ? Date.now() - (startTimes.get(env.id) ?? Date.now()) : null,
-      newResources: newResourceCount.get(env.id) ?? 0,
-      resources: getDisplayRows(env),
-    };
-  }
-  return { envs };
 }
 
 function serviceStatusLabel(status: ResourceRow['health']): string {
@@ -433,177 +255,12 @@ function createTray(): void {
   tray.on('click', () => ensureWindowVisible());
 }
 
-function emitStatus(): void {
-  const snapshot = currentStatusSnapshot();
-  updateTrayMenu(snapshot);
+function emitStatus(snapshot?: StatusResponse): void {
+  const next = snapshot ?? tiltManager.currentStatusSnapshot();
+  updateTrayMenu(next);
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('launcher:status-updated', snapshot);
+    mainWindow.webContents.send('launcher:status-updated', next);
   }
-}
-
-async function pollTiltState(): Promise<void> {
-  for (const env of config.environments) {
-    const resources = await readTiltResources(env);
-    if (!resources) {
-      continue;
-    }
-    discoveredResources.set(env.id, resources);
-    const selected = new Set(env.selectedResources ?? []);
-    newResourceCount.set(env.id, resources.filter((resource) => !selected.has(resource.name)).length);
-    const nextCached = [...resources];
-    env.cachedResources = nextCached;
-    for (const resource of resources) {
-      const key = `${env.id}:${resource.name}`;
-      healthByKey.set(key, await computeHealth(resource));
-    }
-  }
-  // Keep polled discovery data in-memory; only persist config on explicit save.
-  emitStatus();
-}
-
-function startPolling(): void {
-  if (pollHandle) clearInterval(pollHandle);
-  pollHandle = setInterval(() => {
-    void pollTiltState();
-  }, 5000);
-  void pollTiltState();
-}
-
-function startEnv(envId: string): { ok: boolean; error?: string } {
-  const env = envById(envId);
-  if (!env) return { ok: false, error: 'Unknown environment.' };
-  const state = getEnvState(env);
-  if (state === 'running' || state === 'starting') return { ok: false, error: 'Environment already active.' };
-
-  appendLog(env.id, `[launcher] Starting ${env.name}...`);
-  appendLog(env.id, `[launcher] tilt up -f ${env.tiltfile} --port ${env.tiltPort}`);
-  const child = spawn('tilt', ['up', '-f', env.tiltfile, '--port', String(env.tiltPort)], {
-    cwd: env.repoDir,
-    detached: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, PWD: env.repoDir },
-  });
-  child.unref();
-  child.stdout?.on('data', (chunk: Buffer) => {
-    for (const line of chunk.toString().split('\n').filter(Boolean)) appendLog(env.id, line);
-  });
-  child.stderr?.on('data', (chunk: Buffer) => {
-    for (const line of chunk.toString().split('\n').filter(Boolean)) appendLog(env.id, line);
-  });
-  child.on('close', (code) => {
-    appendLog(env.id, `[launcher] Process exited with code ${code ?? 0}`);
-    processes.delete(env.id);
-    emitStatus();
-  });
-  child.on('error', (error: Error) => {
-    appendLog(env.id, `[launcher] ${error.message}`);
-    processes.delete(env.id);
-    emitStatus();
-  });
-  processes.set(env.id, child);
-  startTimes.set(env.id, Date.now());
-  emitStatus();
-  return { ok: true };
-}
-
-function stopEnv(envId: string): { ok: boolean; error?: string } {
-  const env = envById(envId);
-  if (!env) return { ok: false, error: 'Unknown environment.' };
-  appendLog(env.id, `[launcher] Stopping ${env.name}...`);
-
-  void runCommand('lsof', ['-ti', `tcp:${env.tiltPort}`], env.repoDir).then((result) => {
-    if (!result.output.trim()) return;
-    for (const line of result.output.trim().split('\n')) {
-      const pid = Number(line.trim());
-      if (Number.isFinite(pid)) {
-        try {
-          process.kill(pid, 'SIGTERM');
-        } catch {
-          // already stopped
-        }
-      }
-    }
-  });
-
-  const tracked = processes.get(env.id);
-  if (tracked?.pid) {
-    try {
-      process.kill(-tracked.pid, 'SIGTERM');
-    } catch {
-      try {
-        tracked.kill('SIGTERM');
-      } catch {
-        // noop
-      }
-    }
-  }
-  void runCommand('tilt', ['down', '--port', String(env.tiltPort)], env.repoDir);
-  processes.delete(env.id);
-  startTimes.delete(env.id);
-  emitStatus();
-  return { ok: true };
-}
-
-async function discoverResources(input: {
-  tiltfilePath: string;
-  tiltPort: number;
-  timeoutMs?: number;
-}): Promise<DiscoverResult> {
-  const repoDir = dirname(input.tiltfilePath);
-  const tiltfile = basename(input.tiltfilePath);
-  const timeoutMs = input.timeoutMs ?? 30000;
-  const logsOut: string[] = [];
-
-  const discoveryProc = spawn('tilt', ['up', '-f', tiltfile, '--port', String(input.tiltPort)], {
-    cwd: repoDir,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, PWD: repoDir },
-  });
-
-  discoveryProc.stdout.on('data', (chunk: Buffer) => {
-    logsOut.push(...chunk.toString().split('\n').filter(Boolean));
-  });
-  discoveryProc.stderr.on('data', (chunk: Buffer) => {
-    logsOut.push(...chunk.toString().split('\n').filter(Boolean));
-  });
-
-  const startedAt = Date.now();
-  let resources: CachedResource[] | null = null;
-  while (Date.now() - startedAt < timeoutMs) {
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    const env: Environment = {
-      id: 'discovery',
-      name: 'Discovery',
-      repoDir,
-      tiltfile,
-      tiltPort: input.tiltPort,
-      selectedResources: [],
-      cachedResources: [],
-    };
-    resources = await readTiltResources(env);
-    if (resources && resources.length > 0) break;
-  }
-
-  void runCommand('tilt', ['down', '--port', String(input.tiltPort)], repoDir);
-  if (discoveryProc.pid) {
-    try {
-      process.kill(-discoveryProc.pid, 'SIGTERM');
-    } catch {
-      discoveryProc.kill('SIGTERM');
-    }
-  }
-
-  if (!resources || resources.length === 0) {
-    return {
-      ok: false,
-      resources: [],
-      logs: logsOut,
-      error:
-        'No resources found. The Tiltfile may have only defined the Tiltfile itself, or it failed to start within the discovery timeout.',
-    };
-  }
-
-  return { ok: true, resources, logs: logsOut };
 }
 
 /**
@@ -723,14 +380,15 @@ function createWindow(): void {
 
 function registerIpcHandlers(): void {
   ipcMain.handle('launcher:get-config', () => config);
-  ipcMain.handle('launcher:get-status', () => currentStatusSnapshot());
-  ipcMain.handle('launcher:start-env', (_event, envId: string) => startEnv(envId));
-  ipcMain.handle('launcher:stop-env', (_event, envId: string) => stopEnv(envId));
+  ipcMain.handle('launcher:get-status', () => tiltManager.currentStatusSnapshot());
+  ipcMain.handle('launcher:start-env', (_event, envId: string) => tiltManager.startEnv(envId));
+  ipcMain.handle('launcher:stop-env', (_event, envId: string) => tiltManager.stopEnv(envId));
   ipcMain.handle('launcher:save-config', (_event, nextConfig: Config) => {
     const normalized = normalizeConfig(nextConfig);
     const conflict = ensureUniquePorts(normalized);
     if (conflict) return { ok: false, error: conflict };
     config = normalized;
+    tiltManager.setConfig(config);
     writeConfig(config);
     emitStatus();
     return { ok: true };
@@ -750,7 +408,8 @@ function registerIpcHandlers(): void {
   });
   ipcMain.handle(
     'launcher:discover-resources',
-    (_event, payload: { tiltfilePath: string; tiltPort: number; timeoutMs?: number }) => discoverResources(payload),
+    (_event, payload: { tiltfilePath: string; tiltPort: number; timeoutMs?: number }) =>
+      tiltManager.discoverResources(payload),
   );
   ipcMain.handle('launcher:get-login-item', () => {
     return { openAtLogin: app.getLoginItemSettings().openAtLogin };
@@ -821,7 +480,7 @@ app.whenReady().then(() => {
   registerIpcHandlers();
   createTray();
   createWindow();
-  startPolling();
+  tiltManager.startPolling();
   emitStatus();
 
   app.on('activate', () => {
@@ -839,8 +498,6 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   quitting = true;
-  if (pollHandle) clearInterval(pollHandle);
-  for (const envId of processes.keys()) {
-    stopEnv(envId);
-  }
+  tiltManager.stopPolling();
+  // Match legacy launcher behavior: quitting the app does not stop Tilt.
 });
