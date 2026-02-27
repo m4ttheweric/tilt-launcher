@@ -3,6 +3,7 @@
 import { packager } from '@electron/packager';
 import { copyFileSync, existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { $ } from 'bun';
 
 const DIR = import.meta.dir;
 const OUT_DIR = join(DIR, 'dist-app');
@@ -30,6 +31,9 @@ const iconBasePath = join(DIR, 'AppIcon');
 const iconPath = `${iconBasePath}.icns`;
 
 rmSync(OUT_DIR, { recursive: true, force: true });
+
+// Ensure Electron entrypoints exist even after local artifact cleanup.
+await $`bunx electron-vite build`;
 
 const bundled = await packager({
   dir: DIR,
