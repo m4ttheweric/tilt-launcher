@@ -106,30 +106,12 @@ export class TiltManagerSDK {
     if (!env) return { ok: false, error: 'Unknown environment.' };
     this.appendLog(env.id, `[launcher] Stopping ${env.name}...`);
 
-    void this.runCommand('lsof', ['-ti', `tcp:${env.tiltPort}`], env.repoDir).then((result) => {
-      if (!result.output.trim()) return;
-      for (const line of result.output.trim().split('\n')) {
-        const pid = Number(line.trim());
-        if (Number.isFinite(pid)) {
-          try {
-            process.kill(pid, 'SIGTERM');
-          } catch {
-            // already stopped
-          }
-        }
-      }
-    });
-
     const tracked = this.processes.get(env.id);
-    if (tracked?.pid) {
+    if (tracked) {
       try {
-        process.kill(-tracked.pid, 'SIGTERM');
+        tracked.kill('SIGTERM');
       } catch {
-        try {
-          tracked.kill('SIGTERM');
-        } catch {
-          // noop
-        }
+        // already stopped
       }
     }
     void this.runCommand('tilt', ['down', '--port', String(env.tiltPort)], env.repoDir);
@@ -138,6 +120,24 @@ export class TiltManagerSDK {
     this.tiltPortReachable.delete(env.id);
     this.emitStatus();
     return { ok: true };
+  }
+
+  restartEnv(envId: string): { ok: boolean; error?: string } {
+    const stopped = this.stopEnv(envId);
+    if (!stopped.ok) return stopped;
+    return this.startEnv(envId);
+  }
+
+  async triggerResource(envId: string, resourceName: string): Promise<{ ok: boolean; error?: string }> {
+    return await this.runResourceCommand(envId, ['trigger', resourceName]);
+  }
+
+  async enableResource(envId: string, resourceName: string): Promise<{ ok: boolean; error?: string }> {
+    return await this.runResourceCommand(envId, ['enable', resourceName]);
+  }
+
+  async disableResource(envId: string, resourceName: string): Promise<{ ok: boolean; error?: string }> {
+    return await this.runResourceCommand(envId, ['disable', resourceName]);
   }
 
   async discoverResources(input: {
@@ -274,6 +274,24 @@ export class TiltManagerSDK {
     });
   }
 
+  private async runResourceCommand(envId: string, args: string[]): Promise<{ ok: boolean; error?: string }> {
+    const env = this.envById(envId);
+    if (!env) return { ok: false, error: 'Unknown environment.' };
+    const command = ['tilt', ...args, '--port', String(env.tiltPort)].join(' ');
+    this.appendLog(env.id, `[launcher] ${command}`);
+    const result = await this.runCommand('tilt', [...args, '--port', String(env.tiltPort)], env.repoDir);
+    if (result.code !== 0) {
+      const detail = result.output.trim();
+      if (detail) this.appendLog(env.id, detail);
+      this.emitStatus();
+      return { ok: false, error: detail || `Command failed: ${command}` };
+    }
+    const detail = result.output.trim();
+    if (detail) this.appendLog(env.id, detail);
+    await this.pollTiltState();
+    return { ok: true };
+  }
+
   private async readTiltResources(env: Environment): Promise<CachedResource[] | null> {
     const result = await this.runCommand(
       'tilt',
@@ -289,6 +307,7 @@ export class TiltManagerSDK {
             endpointLinks?: Array<{ url?: string }>;
             runtimeStatus?: string;
             specs?: Array<{ type?: string }>;
+            disableStatus?: { state?: string };
           };
         }>;
       };
@@ -298,6 +317,9 @@ export class TiltManagerSDK {
           const endpoint = this.absoluteEndpoint(item.status?.endpointLinks?.[0]?.url, env);
           const parsedEndpoint = this.parseEndpoint(endpoint);
           const labels = item.metadata?.labels ? Object.keys(item.metadata.labels) : [];
+          const disableState = item.status?.disableStatus?.state?.toLowerCase();
+          const isDisabled = disableState === 'disabled' || disableState === 'pending';
+          const runtimeStatus = isDisabled ? 'disabled' : (item.status?.runtimeStatus ?? 'unknown');
           return {
             name: item.metadata?.name ?? 'unknown',
             label: item.metadata?.name ?? 'unknown',
@@ -306,7 +328,8 @@ export class TiltManagerSDK {
             endpoint,
             port: parsedEndpoint.port,
             path: parsedEndpoint.path,
-            runtimeStatus: item.status?.runtimeStatus ?? 'unknown',
+            runtimeStatus,
+            isDisabled,
           };
         });
     } catch {
@@ -344,28 +367,46 @@ export class TiltManagerSDK {
     });
   }
 
-  private async computeHealth(resource: CachedResource): Promise<ResourceRow['health']> {
+  private runtimeHealth(resource: CachedResource): ResourceRow['health'] {
+    if (resource.isDisabled) return 'unknown';
+    const runtime = (resource.runtimeStatus ?? '').toLowerCase();
+    if (runtime === 'ok') return 'up';
+    if (runtime === 'not_applicable' || runtime === '') return 'unknown';
+    return 'down';
+  }
+
+  private async computeHealth(resource: CachedResource, env: Environment): Promise<ResourceRow['health']> {
+    const runtimeDerived = this.runtimeHealth(resource);
+    if (resource.isDisabled) return runtimeDerived;
     const parsed = this.parseEndpoint(resource.endpoint);
     const path = parsed.path ?? resource.path ?? '/';
     const protocol = parsed.protocol === 'https:' ? 'https:' : 'http:';
 
+    // Tilt often exposes resource links through its own dashboard proxy port.
+    // Probing that port only confirms Tilt is up, not the underlying service.
+    if (parsed.hostname === 'localhost' && parsed.port === env.tiltPort) {
+      return runtimeDerived;
+    }
+
     if (parsed.hostname && parsed.port) {
       const direct = await this.tryConnect(parsed.hostname, parsed.port, path, protocol);
-      if (direct) return 'up';
+      if (direct) return runtimeDerived === 'down' ? 'down' : 'up';
       if (parsed.hostname === 'localhost') {
         const loopback =
           (await this.tryConnect('127.0.0.1', parsed.port, path, protocol)) ||
           (await this.tryConnect('::1', parsed.port, path, protocol));
-        return loopback ? 'up' : 'down';
+        if (loopback) return runtimeDerived === 'down' ? 'down' : 'up';
+        return runtimeDerived === 'up' ? 'down' : runtimeDerived;
       }
-      return 'down';
+      return runtimeDerived === 'up' ? 'down' : runtimeDerived;
     }
 
-    if (!resource.port) return 'unknown';
+    if (!resource.port) return runtimeDerived;
     const ok =
       (await this.tryConnect('127.0.0.1', resource.port, path, protocol)) ||
       (await this.tryConnect('::1', resource.port, path, protocol));
-    return ok ? 'up' : 'down';
+    if (ok) return runtimeDerived === 'down' ? 'down' : 'up';
+    return runtimeDerived === 'up' ? 'down' : runtimeDerived;
   }
 
   private getDisplayRows(env: Environment): ResourceRow[] {
@@ -386,6 +427,7 @@ export class TiltManagerSDK {
           label: name,
           category: 'services',
           runtimeStatus: 'missing',
+          isDisabled: false,
           health: 'missing',
           exists: false,
           error: `Resource '${name}' not found in Tiltfile output.`,
@@ -400,6 +442,7 @@ export class TiltManagerSDK {
         port: found.port,
         path: found.path,
         runtimeStatus: found.runtimeStatus ?? 'unknown',
+        isDisabled: found.isDisabled ?? false,
         health: this.healthByKey.get(key) ?? 'unknown',
         exists: true,
       };
@@ -429,7 +472,7 @@ export class TiltManagerSDK {
         const resource = mergedByName.get(resourceName);
         if (!resource) continue;
         const key = `${env.id}:${resource.name}`;
-        this.healthByKey.set(key, await this.computeHealth(resource));
+        this.healthByKey.set(key, await this.computeHealth(resource, env));
       }
     }
     this.emitStatus();

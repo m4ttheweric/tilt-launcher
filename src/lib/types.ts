@@ -7,6 +7,7 @@ export interface CachedResource {
   port?: number | undefined;
   path?: string | undefined;
   runtimeStatus?: string | undefined;
+  isDisabled?: boolean | undefined;
 }
 
 export interface Environment {
@@ -55,6 +56,7 @@ export interface ResourceRow {
   port?: number | undefined;
   path?: string | undefined;
   runtimeStatus: string;
+  isDisabled: boolean;
   health: HealthStatus;
   exists: boolean;
   error?: string | undefined;

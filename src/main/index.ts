@@ -383,6 +383,16 @@ function registerIpcHandlers(): void {
   ipcMain.handle('launcher:get-status', () => tiltManager.currentStatusSnapshot());
   ipcMain.handle('launcher:start-env', (_event, envId: string) => tiltManager.startEnv(envId));
   ipcMain.handle('launcher:stop-env', (_event, envId: string) => tiltManager.stopEnv(envId));
+  ipcMain.handle('launcher:restart-env', (_event, envId: string) => tiltManager.restartEnv(envId));
+  ipcMain.handle('launcher:trigger-resource', (_event, payload: { envId: string; resourceName: string }) =>
+    tiltManager.triggerResource(payload.envId, payload.resourceName),
+  );
+  ipcMain.handle('launcher:enable-resource', (_event, payload: { envId: string; resourceName: string }) =>
+    tiltManager.enableResource(payload.envId, payload.resourceName),
+  );
+  ipcMain.handle('launcher:disable-resource', (_event, payload: { envId: string; resourceName: string }) =>
+    tiltManager.disableResource(payload.envId, payload.resourceName),
+  );
   ipcMain.handle('launcher:save-config', (_event, nextConfig: Config) => {
     const normalized = normalizeConfig(nextConfig);
     const conflict = ensureUniquePorts(normalized);

@@ -15,6 +15,13 @@ const api = {
   getStatus: (): Promise<StatusResponse> => ipcRenderer.invoke('launcher:get-status'),
   startEnv: (envId: string): Promise<StartStopResult> => ipcRenderer.invoke('launcher:start-env', envId),
   stopEnv: (envId: string): Promise<StartStopResult> => ipcRenderer.invoke('launcher:stop-env', envId),
+  restartEnv: (envId: string): Promise<StartStopResult> => ipcRenderer.invoke('launcher:restart-env', envId),
+  triggerResource: (envId: string, resourceName: string): Promise<StartStopResult> =>
+    ipcRenderer.invoke('launcher:trigger-resource', { envId, resourceName }),
+  enableResource: (envId: string, resourceName: string): Promise<StartStopResult> =>
+    ipcRenderer.invoke('launcher:enable-resource', { envId, resourceName }),
+  disableResource: (envId: string, resourceName: string): Promise<StartStopResult> =>
+    ipcRenderer.invoke('launcher:disable-resource', { envId, resourceName }),
   saveConfig: (config: Config): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('launcher:save-config', config),
   pickTiltfile: (): Promise<PickedTiltfile | null> => ipcRenderer.invoke('launcher:pick-tiltfile'),

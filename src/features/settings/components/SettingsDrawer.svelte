@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Config, DiscoverResult, Environment } from '$lib/types.ts';
   import { Button } from '$lib/components/ui/button/index.js';
+  import * as Field from '$lib/components/ui/field/index.js';
   import { ScrollArea } from '$lib/components/ui/scroll-area/index.js';
   import { Separator } from '$lib/components/ui/separator/index.js';
   import AppearanceSettingsSection from './AppearanceSettingsSection.svelte';
@@ -79,47 +80,48 @@
     <div class="flex items-center justify-between border-b border-border px-3 py-2">
       <div>
         <h3 class="text-base font-semibold">Settings</h3>
-        <p class="text-xs text-muted-foreground">Tiltfile-driven environment configuration</p>
       </div>
-      <Button size="sm" variant="outline" onclick={onClose}>Close</Button>
+      <Button variant="outline" onclick={onClose}>Close</Button>
     </div>
 
     <ScrollArea class="min-h-0 flex-1">
-      <div class="space-y-4 p-3">
-        <AppearanceSettingsSection
-          themeMode={draftConfig.themeMode ?? 'system'}
-          launchAtLogin={launchAtLoginDraft}
-          {onThemeModeChange}
-          {onLaunchAtLoginChange}
-        />
-
-        <AddEnvironmentSettingsSection
-          {pickerKey}
-          {newEnvName}
-          {newEnvDescription}
-          {newTiltPort}
-          {discovering}
-          {discoveryElapsed}
-          {discoveryMaxSeconds}
-          {discoverResult}
-          {selectedDiscovery}
-          {onTiltfilePick}
-          {onNewEnvNameChange}
-          {onNewEnvDescriptionChange}
-          {onNewTiltPortChange}
-          {onDiscoverySelectionChange}
-          onRunDiscovery={() => void onRunDiscovery()}
-          onAddEnvironment={onAddDiscoveredEnvironment}
-        />
-
-        <ConfiguredEnvironmentsSettingsSection
-          {draftConfig}
-          onNameChange={onDraftEnvNameChange}
-          onDescriptionChange={onDraftEnvDescriptionChange}
-          onTiltPortChange={onDraftEnvTiltPortChange}
-          {onRediscover}
-          onRemove={onRemoveEnvironment}
-        />
+      <div class="p-3">
+        <Field.Group>
+          <AppearanceSettingsSection
+            themeMode={draftConfig.themeMode ?? 'system'}
+            launchAtLogin={launchAtLoginDraft}
+            {onThemeModeChange}
+            {onLaunchAtLoginChange}
+          />
+          <Field.Separator />
+          <AddEnvironmentSettingsSection
+            {pickerKey}
+            {newEnvName}
+            {newEnvDescription}
+            {newTiltPort}
+            {discovering}
+            {discoveryElapsed}
+            {discoveryMaxSeconds}
+            {discoverResult}
+            {selectedDiscovery}
+            {onTiltfilePick}
+            {onNewEnvNameChange}
+            {onNewEnvDescriptionChange}
+            {onNewTiltPortChange}
+            {onDiscoverySelectionChange}
+            onRunDiscovery={() => void onRunDiscovery()}
+            onAddEnvironment={onAddDiscoveredEnvironment}
+          />
+          <Field.Separator />
+          <ConfiguredEnvironmentsSettingsSection
+            {draftConfig}
+            onNameChange={onDraftEnvNameChange}
+            onDescriptionChange={onDraftEnvDescriptionChange}
+            onTiltPortChange={onDraftEnvTiltPortChange}
+            {onRediscover}
+            onRemove={onRemoveEnvironment}
+          />
+        </Field.Group>
       </div>
     </ScrollArea>
 

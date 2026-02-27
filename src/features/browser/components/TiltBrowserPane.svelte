@@ -99,12 +99,11 @@
         </p>
         <div class="flex items-center justify-center gap-2">
           <Button
-            size="sm"
             onclick={() => void onStart(selectedEnv)}
             disabled={selectedEnvStatus === 'starting' || selectedEnvStatus === 'running'}
             >{selectedEnvStatus === 'starting' ? 'Starting...' : `Start ${selectedEnv.name}`}</Button
           >
-          <Button size="sm" variant="secondary" onclick={onRetry}>Retry</Button>
+          <Button variant="secondary" onclick={onRetry}>Retry</Button>
         </div>
       </div>
     </div>

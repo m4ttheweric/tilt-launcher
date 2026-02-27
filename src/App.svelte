@@ -1,6 +1,17 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fetchConfig, fetchStatus, onStatusUpdated, openExternal, startEnv, stopEnv } from './lib/api.ts';
+  import {
+    disableResource,
+    enableResource,
+    fetchConfig,
+    fetchStatus,
+    onStatusUpdated,
+    openExternal,
+    restartEnv,
+    startEnv,
+    stopEnv,
+    triggerResource,
+  } from './lib/api.ts';
   import { DISCOVERY_PROGRESS_MAX_SECONDS } from './lib/constants.ts';
   import type { Config, Environment, StatusResponse } from './lib/types.ts';
   import AppHeader from './features/shell/components/AppHeader.svelte';
@@ -48,13 +59,17 @@
   });
   const paneResize = usePaneResize(launcher);
 
-  let selectedEnv = $derived(config?.environments.find((env) => env.id === launcher.selectedEnvId) ?? null);
+  let selectedEnv = $derived.by(() => {
+    const environments: Environment[] = config?.environments ?? [];
+    return environments.find((env) => env.id === launcher.selectedEnvId) ?? null;
+  });
   let selectedEnvStatus = $derived(selectedEnv ? (statusData.envs[selectedEnv.id]?.status ?? 'stopped') : 'stopped');
 
   async function refresh(): Promise<void> {
     statusData = await fetchStatus();
-    if (!launcher.selectedEnvId && config?.environments.length) {
-      launcher.selectedEnvId = config.environments[0].id;
+    const firstEnv = config?.environments[0];
+    if (!launcher.selectedEnvId && firstEnv) {
+      launcher.selectedEnvId = firstEnv.id;
       launcher.activeLogEnvId = launcher.selectedEnvId;
     }
   }
@@ -64,9 +79,10 @@
       config = await fetchConfig();
       theme.applyTheme(config.themeMode ?? 'system');
       statusData = await fetchStatus();
-      if (config.environments.length > 0) {
-        launcher.selectedEnvId = config.environments[0].id;
-        launcher.activeLogEnvId = config.environments[0].id;
+      const firstEnv = config.environments[0];
+      if (firstEnv) {
+        launcher.selectedEnvId = firstEnv.id;
+        launcher.activeLogEnvId = firstEnv.id;
         launcher.selectedTiltUrl = '';
       }
     } catch (error) {
@@ -84,6 +100,30 @@
   async function handleStop(env: Environment): Promise<void> {
     const result = await stopEnv(env.id);
     if (!result.ok) notify('error', result.error ?? 'Failed to stop environment.');
+    await refresh();
+  }
+
+  async function handleRestart(env: Environment): Promise<void> {
+    const result = await restartEnv(env.id);
+    if (!result.ok) notify('error', result.error ?? 'Failed to restart environment.');
+    await refresh();
+  }
+
+  async function handleTriggerResource(envId: string, resourceName: string): Promise<void> {
+    const result = await triggerResource(envId, resourceName);
+    if (!result.ok) notify('error', result.error ?? `Failed to trigger ${resourceName}.`);
+    await refresh();
+  }
+
+  async function handleEnableResource(envId: string, resourceName: string): Promise<void> {
+    const result = await enableResource(envId, resourceName);
+    if (!result.ok) notify('error', result.error ?? `Failed to enable ${resourceName}.`);
+    await refresh();
+  }
+
+  async function handleDisableResource(envId: string, resourceName: string): Promise<void> {
+    const result = await disableResource(envId, resourceName);
+    if (!result.ok) notify('error', result.error ?? `Failed to disable ${resourceName}.`);
     await refresh();
   }
 
@@ -124,6 +164,10 @@
     {launcher}
     onStart={handleStart}
     onStop={handleStop}
+    onRestart={handleRestart}
+    onTriggerResource={handleTriggerResource}
+    onEnableResource={handleEnableResource}
+    onDisableResource={handleDisableResource}
     onOpenExternal={openExternal}
     onStartVerticalResize={paneResize.startVerticalResize}
     onStartHorizontalResize={paneResize.startHorizontalResize}

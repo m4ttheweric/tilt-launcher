@@ -29,6 +29,22 @@ export async function stopEnv(envId: string): Promise<Result> {
   return await bridge().stopEnv(envId);
 }
 
+export async function restartEnv(envId: string): Promise<Result> {
+  return await bridge().restartEnv(envId);
+}
+
+export async function triggerResource(envId: string, resourceName: string): Promise<Result> {
+  return await bridge().triggerResource(envId, resourceName);
+}
+
+export async function enableResource(envId: string, resourceName: string): Promise<Result> {
+  return await bridge().enableResource(envId, resourceName);
+}
+
+export async function disableResource(envId: string, resourceName: string): Promise<Result> {
+  return await bridge().disableResource(envId, resourceName);
+}
+
 export async function saveConfig(config: Config): Promise<Result> {
   return await bridge().saveConfig(config);
 }

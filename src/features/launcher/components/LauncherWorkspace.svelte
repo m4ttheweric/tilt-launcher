@@ -15,6 +15,10 @@
     launcher: LauncherState;
     onStart: (env: Environment) => void | Promise<void>;
     onStop: (env: Environment) => void | Promise<void>;
+    onRestart: (env: Environment) => void | Promise<void>;
+    onTriggerResource: (envId: string, resourceName: string) => void | Promise<void>;
+    onEnableResource: (envId: string, resourceName: string) => void | Promise<void>;
+    onDisableResource: (envId: string, resourceName: string) => void | Promise<void>;
     onOpenExternal: (url: string) => void | Promise<void>;
     onStartVerticalResize: (event: MouseEvent) => void;
     onStartHorizontalResize: (event: MouseEvent) => void;
@@ -28,6 +32,10 @@
     launcher,
     onStart,
     onStop,
+    onRestart,
+    onTriggerResource,
+    onEnableResource,
+    onDisableResource,
     onOpenExternal,
     onStartVerticalResize,
     onStartHorizontalResize,
@@ -53,6 +61,10 @@
       onOpenTilt={launcher.openTilt}
       {onStart}
       {onStop}
+      {onRestart}
+      {onTriggerResource}
+      {onEnableResource}
+      {onDisableResource}
       {onOpenExternal}
     />
 
