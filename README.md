@@ -1,184 +1,76 @@
 # Tilt Launcher
 
-A native macOS menu bar app and web dashboard for managing [Tilt](https://tilt.dev/) development environments.
+Tilt Launcher is a single Electron app for managing [Tilt](https://tilt.dev/) development environments on macOS.
 
-- **Menu bar app** (▲) — live health status indicators, quick links to Tilt dashboards and services, preferences, and Launch at Login
-- **Web dashboard** — start/stop environments, live health checks, uptime tracking, log streaming
-- **Configurable** — manage multiple Tilt environments across different repos via JSON config or the built-in preferences UI
-- **Distributable** — installable via DMG or `./install.sh`, builds for both Apple Silicon and Intel
+- Tray + desktop window in one runtime
+- Start/stop environments, inspect resources, and stream logs
+- Launch-at-login support from app settings
+- Config stored at `~/.config/tilt-launcher/config.json`
+
+## Prerequisites
+
+- macOS 14+
+- `bun`
+- `tilt`
 
 ## Quick Start
-
-### Option A: Download the DMG
-
-Download the latest release from [GitHub Releases](../../releases), open the DMG, and drag **Tilt Launcher** to Applications.
-
-### Option B: Build from source
 
 ```bash
 git clone https://github.com/m4ttheweric/tilt-launcher.git
 cd tilt-launcher
-./install.sh
+bun install
+bun run dev
 ```
 
-The installer will:
+To install a packaged app locally:
 
-1. Check prerequisites (Node.js, Tilt, Swift compiler)
-2. Install dependencies and build the dashboard (`bun install && bun run build`)
-3. Compile and install the menu bar app to `/Applications/`
-4. Create a config file at `~/.config/tilt-launcher/config.json`
-5. Optionally set up HTTPS with a custom domain (e.g. `local.dev`)
-
-## Prerequisites
-
-- **macOS** 14+ (Sonoma or later)
-- **Node.js** 22+ (`brew install node`)
-- **Tilt** (`brew install tilt-dev/tap/tilt`)
-- **bun** (optional, preferred — `brew install oven-sh/bun/bun`; falls back to npm)
+```bash
+bun run install:app
+```
 
 ## Configuration
 
-Edit `~/.config/tilt-launcher/config.json`:
+The app reads/writes:
 
-```json
-{
-  "port": 10400,
-  "environments": [
-    {
-      "id": "my-project",
-      "name": "My Project",
-      "repoDir": "/path/to/your/project",
-      "tiltfile": "Tiltfile",
-      "tiltPort": 10350,
-      "description": "Local development environment",
-      "services": [
-        { "id": "api", "label": "API", "port": 4000, "path": "/" },
-        { "id": "web", "label": "Web", "port": 3000, "path": "/" }
-      ]
-    }
-  ]
-}
-```
+- `~/.config/tilt-launcher/config.json`
 
-Each environment has:
+If the file does not exist, `config.example.json` is used as the seed.
 
-- **repoDir** — absolute path to the repo containing the Tiltfile
-- **tiltfile** — Tiltfile name (relative to repoDir)
-- **tiltPort** — port for the Tilt dashboard (each env needs a unique port)
-- **services** — health check endpoints shown in the dashboard
-
-You can also edit config from the menu bar via **Preferences...** (⌘,).
-
-## How it Works
-
-```
-TiltLauncher.app (menu bar)
-  └─ spawns → tilt-launcher.mjs (web server on :10400)
-                ├─ GET  /           → Svelte dashboard
-                ├─ GET  /api/config → config.json
-                ├─ GET  /api/status → health + status
-                ├─ POST /api/start/:id → tilt up (detached)
-                └─ POST /api/stop/:id  → tilt down
-```
-
-Tilt processes are **detached** — they survive dashboard restarts. Status is derived from health checks, not process tracking, so the dashboard can restart without affecting running environments.
-
-The `.app` is self-contained: server, dashboard, and config template are bundled in `Contents/Resources/`. Only Node.js needs to be installed on the system.
-
-## Menu Bar Features
-
-- **Open Dashboard** — opens the web UI in your browser
-- **Tilt Dashboards** — per-environment links to Tilt UIs, with blue triangle status indicators
-- **Service Links** — per-environment service links, with green/grey health dots
-- **Server status** — green/grey dot showing running/stopped
-- **Restart Server** — restart the Node server without affecting Tilt
-- **Launch at Login** — toggle auto-start on login (uses SMAppService)
-- **Preferences** — edit environments and services in a resizable native macOS window
-
-Health indicators poll `/api/status` every 5 seconds and update live, even while the menu is open.
-
-## Custom Dashboard URL (Optional)
-
-By default the dashboard runs on plain HTTP at `http://localhost:10400`. If you want to use a custom domain, set `dashboardUrl` in your config:
-
-```json
-{
-  "dashboardUrl": "http://my-custom-domain:10400"
-}
-```
-
-When `dashboardUrl` is omitted or empty, the app defaults to `http://localhost:{port}`. The preferences UI shows the resolved default as placeholder text.
-
-## Development
-
-Built with **Svelte 5** (runes), **Tailwind CSS v4**, **TypeScript 7** (native preview / tsgo), **Vite 7**, and **bun**.
+## Development Commands
 
 ```bash
-bun install          # install deps (also installs pre-commit hook)
-bun run dev          # vite dev server with HMR
-bun run build        # type check → lint → production build
-bun run check        # tsgo type check
-bun run lint         # eslint (svelte + ts strict)
-bun run lint:fix     # eslint with auto-fix
-bun run format       # prettier (svelte + tailwind class sorting)
-bun run format:check # prettier check (CI-friendly)
-./build.sh           # compile Swift menu bar app + bundle resources
-./package-dmg.sh     # create distributable DMG
+bun run dev          # Electron + renderer dev mode
+bun run build        # type check + lint + electron-vite build
+bun run check        # tsgo --noEmit
+bun run lint         # eslint
+bun run lint:fix     # eslint --fix
+bun run format       # prettier --write
+bun run format:check # prettier --check
+bun run package:app  # build macOS .app via electron-packager
+bun run package:dmg -- "<app-bundle-path>" "<output-dmg-path>"
 ```
 
-After frontend changes: `bun run build`, then "Restart Server" from the menu bar.
-After Swift changes: `./build.sh && cp -r TiltLauncher.app /Applications/`, then relaunch.
+## Architecture
 
-### Pre-commit Hook
+The Electron main process is the orchestrator:
 
-Installed automatically via `bun install` (the `prepare` script). Runs 8 checks:
+- manages tray menu and dashboard window lifecycle
+- runs Tilt start/stop/discovery
+- polls resource status + health
+- owns config persistence (explicit save only)
 
-**Code Quality:** Prettier, TypeScript (tsgo), ESLint, Swift types, SwiftLint (optional), Node syntax
-**Builds:** Vite build, Swift build
+The renderer (`src/App.svelte`) provides dashboard and settings UI over IPC through `src/preload/index.ts`.
 
-Both builds output to temp directories — no side effects on the running server. Uses `git stash --keep-index` to check exactly what's staged.
+## Release Flow
 
-## File Structure
-
-```
-├── src/                         Svelte 5 + TypeScript dashboard
-│   ├── App.svelte               Root component
-│   ├── app.css                  Tailwind imports + custom theme
-│   ├── main.ts                  Entry point
-│   ├── vite-env.d.ts            Ambient type declarations
-│   └── lib/
-│       ├── api.ts               Typed API client
-│       ├── types.ts             Config, Environment, StatusResponse
-│       ├── utils.ts             formatUptime helper
-│       └── components/
-│           ├── HealthBar.svelte Health status chips
-│           ├── EnvCard.svelte   Environment card with controls
-│           └── LogPanel.svelte  Tabbed log viewer
-├── tilt-launcher.mjs            Node.js HTTP server (API + static files)
-├── TiltLauncher.swift           macOS menu bar app (AppKit + SMAppService)
-├── config.example.json          Example config (copied on first install)
-├── build.sh                     Swift compilation + resource bundling
-├── install.sh                   One-step installer
-├── package-dmg.sh               DMG packaging for distribution
-├── hooks/pre-commit             Pre-commit hook (8 checks)
-├── .github/workflows/release.yml  CI: build + DMG + GitHub Release
-├── vite.config.js               Vite + Svelte + Tailwind
-├── eslint.config.js             ESLint 10 flat config
-├── tsconfig.json                TypeScript 7 native (tsgo)
-├── .prettierrc                  Prettier + Svelte + Tailwind sorting
-└── package.json                 Scripts + dependencies
-```
-
-## Releasing
-
-Use the release script to bump version, run all checks, and push:
+Use:
 
 ```bash
-./release.sh           # interactive: choose patch/minor/major
-./release.sh --dry-run # validate without releasing
+bun run release
+bun run release:dry
 ```
 
-This bumps `package.json` and `build.sh`, commits, tags `vX.Y.Z`, and pushes. The tag triggers GitHub Actions which builds DMGs for both Apple Silicon and Intel and attaches them to a GitHub Release.
+Tag pushes trigger GitHub Actions to package arm64 + x64 apps and publish DMGs.
 
 ## Uninstall
 

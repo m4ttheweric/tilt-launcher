@@ -35,14 +35,11 @@ jobs:
       - name: Build dashboard
         run: bun run build
 
-      - name: Build macOS app
-        run: ./build.sh
+      - name: Package Electron app
+        run: bun run package:app --arch ${{ matrix.arch }}
 
       - name: Package DMG
-        run: ./package-dmg.sh
-
-      - name: Rename DMG with arch
-        run: mv TiltLauncher.dmg TiltLauncher-${{ matrix.arch }}.dmg
+        run: ./package-dmg.sh "dist-app/TiltLauncher-darwin-${{ matrix.arch }}/TiltLauncher.app" "TiltLauncher-${{ matrix.arch }}.dmg"
 
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
