@@ -1,6 +1,6 @@
 {
   "name": "@tilt-launcher/sidecar",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Standalone sidecar binary + typed client for the Tilt Launcher SDK — JSON-RPC 2.0 over stdio",
   "type": "module",
   "main": "src/client.ts",

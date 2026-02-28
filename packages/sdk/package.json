@@ -1,6 +1,6 @@
 {
   "name": "@tilt-launcher/sdk",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "SDK for managing Tilt dev environments — start, stop, monitor, and control resources",
   "type": "module",
   "main": "dist/index.js",
