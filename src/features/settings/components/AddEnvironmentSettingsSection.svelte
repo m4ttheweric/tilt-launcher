@@ -3,6 +3,7 @@
   import { Button } from '$lib/components/ui/button/index.js';
   import * as Field from '$lib/components/ui/field/index.js';
   import { Input } from '$lib/components/ui/input/index.js';
+  import { Badge } from '$lib/components/ui/badge/index.js';
   import { Progress } from '$lib/components/ui/progress/index.js';
   import PathAutocomplete from '$lib/components/PathAutocomplete.svelte';
 
@@ -15,12 +16,10 @@
     discoveryElapsed: number;
     discoveryMaxSeconds: number;
     discoverResult: DiscoverResult | null;
-    selectedDiscovery: Record<string, boolean>;
     onTiltfilePick: (path: string, isSymlink: boolean, realPath?: string) => void;
     onNewEnvNameChange: (value: string) => void;
     onNewEnvDescriptionChange: (value: string) => void;
     onNewTiltPortChange: (value: number) => void;
-    onDiscoverySelectionChange: (resourceName: string, selected: boolean) => void;
     onRunDiscovery: () => void | Promise<void>;
     onAddEnvironment: () => void;
   }
@@ -34,17 +33,34 @@
     discoveryElapsed,
     discoveryMaxSeconds,
     discoverResult,
-    selectedDiscovery,
     onTiltfilePick,
     onNewEnvNameChange,
     onNewEnvDescriptionChange,
     onNewTiltPortChange,
-    onDiscoverySelectionChange,
     onRunDiscovery,
     onAddEnvironment,
   }: Props = $props();
 
-  const resourceCheckboxId = (name: string): string => `new-env-resource-${name.replace(/[^A-Za-z0-9_-]/g, '-')}`;
+  interface GroupedResources {
+    category: string;
+    resources: Array<{ name: string; resourceKind: string; port?: number }>;
+  }
+
+  let groupedResources = $derived.by((): GroupedResources[] => {
+    if (!discoverResult?.ok) return [];
+    const buckets: Record<string, GroupedResources['resources']> = {};
+    for (const resource of discoverResult.resources) {
+      const category = resource.category ?? 'services';
+      const existing = buckets[category] ?? [];
+      existing.push({
+        name: resource.name,
+        resourceKind: resource.resourceKind ?? 'unknown',
+        port: resource.port,
+      });
+      buckets[category] = existing;
+    }
+    return Object.entries(buckets).map(([category, resources]) => ({ category, resources }));
+  });
 </script>
 
 <Field.Set>
@@ -121,26 +137,31 @@
       <Field.Field>
         <Field.Label>Discovery results</Field.Label>
         <Field.Description>
-          Discovery succeeded - {discoverResult.resources.length} resource{discoverResult.resources.length === 1
-            ? ''
-            : 's'} found.
+          {discoverResult.resources.length} resource{discoverResult.resources.length === 1 ? '' : 's'} found — all will be
+          added.
         </Field.Description>
-        <div class="max-h-40 space-y-1.5 overflow-auto rounded-md border border-border p-2 text-xs">
-          {#each discoverResult.resources as resource (resource.name)}
-            <Field.Field orientation="horizontal" class="gap-2">
-              <input
-                id={resourceCheckboxId(resource.name)}
-                type="checkbox"
-                checked={selectedDiscovery[resource.name] ?? false}
-                onchange={(e) => onDiscoverySelectionChange(resource.name, e.currentTarget.checked)}
-              />
-              <Field.Content>
-                <Field.Label for={resourceCheckboxId(resource.name)}>{resource.name}</Field.Label>
-                <Field.Description>
-                  {(resource.category ?? 'services') + ' - ' + (resource.port ? `:${resource.port}` : 'no port')}
-                </Field.Description>
-              </Field.Content>
-            </Field.Field>
+        <div class="max-h-52 space-y-3 overflow-auto rounded-md border border-border p-2.5 text-xs">
+          {#each groupedResources as group (group.category)}
+            <div>
+              <p class="mb-1 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                {group.category}
+              </p>
+              <div class="space-y-1">
+                {#each group.resources as resource (resource.name)}
+                  <div class="flex items-center justify-between gap-2 rounded px-1.5 py-1">
+                    <span class="truncate font-medium text-foreground">{resource.name}</span>
+                    <div class="flex shrink-0 items-center gap-1.5">
+                      <Badge variant={resource.resourceKind === 'serve' ? 'default' : 'secondary'} class="text-[10px]">
+                        {resource.resourceKind === 'serve' ? 'serve' : resource.resourceKind === 'cmd' ? 'cmd' : '?'}
+                      </Badge>
+                      {#if resource.port}
+                        <span class="font-mono text-muted-foreground">:{resource.port}</span>
+                      {/if}
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            </div>
           {/each}
         </div>
       </Field.Field>

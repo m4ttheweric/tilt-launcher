@@ -1,0 +1,23 @@
+# Fixture: basic
+#
+# One serve resource (Python HTTP server) + one cmd resource.
+# Used to test: lifecycle, resource discovery, kind classification,
+# health probing, trigger, enable/disable, log capture.
+
+local_resource(
+  'hello-cmd',
+  cmd='echo "hello from tilt-launcher fixture"',
+  labels=['on-demand'],
+)
+
+local_resource(
+  'http-server',
+  serve_cmd='python3 -m http.server 18765',
+  readiness_probe=probe(
+    http_get=http_get_action(port=18765),
+    initial_delay_secs=2,
+    period_secs=2,
+    failure_threshold=10,
+  ),
+  labels=['services'],
+)

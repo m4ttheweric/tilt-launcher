@@ -106,8 +106,30 @@ bun run format           # prettier --write
 bun run format:check     # prettier --check
 bun run package:app      # package .app (electron-packager)
 bun run install:app      # package + install to /Applications
+bun run test:sdk         # run E2E tests for TiltManagerSDK (~3-5 min)
 ./package-dmg.sh <app-bundle-path> [output-dmg-path]
 ```
+
+## E2E Tests
+
+`tests/sdk.e2e.test.ts` — comprehensive integration tests for `TiltManagerSDK`.
+
+**Requires**: `tilt` and `python3` on `$PATH`.
+
+```bash
+bun run test:sdk
+```
+
+Four suites, each spins up a real `tilt` process against a fixture in `tests/fixtures/`:
+
+| Suite            | Fixture                          | Covers                                                                                                                                                          |
+| ---------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `basic`          | `tests/fixtures/basic/`          | lifecycle, discovery, kinds, health, logs, trigger, enable/disable, new UIResource fields (updateStatus, lastDeployTime, buildDuration, pid, conditions, order) |
+| `multi-resource` | `tests/fixtures/multi-resource/` | multi-resource discovery, category labels, concurrent triggers, restart, stop                                                                                   |
+| `slow-build`     | `tests/fixtures/slow-build/`     | build duration measurement, updateStatus lifecycle                                                                                                              |
+| `dependencies`   | `tests/fixtures/dependencies/`   | resource_deps ordering, dependency resolution, serve pid                                                                                                        |
+
+Ports used (must be free): **19100**, **19200**, **19300**, **19400** (Tilt dashboards), **18765**, **18766**, **18767** (fixture HTTP servers).
 
 ## Coding conventions
 

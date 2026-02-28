@@ -14,7 +14,15 @@ import {
 } from 'node:fs';
 import { basename, dirname, join, relative } from 'node:path';
 import { homedir } from 'node:os';
-import type { Config, DirEntry, PickedTiltfile, ReadDirResult, ResourceRow, StatusResponse } from '../lib/types.ts';
+import type {
+  Config,
+  DirEntry,
+  LogDelta,
+  PickedTiltfile,
+  ReadDirResult,
+  ResourceRow,
+  StatusUpdate,
+} from '../lib/types.ts';
 import { TiltManagerSDK } from './tiltManagerSDK.ts';
 
 type EnvState = 'running' | 'starting' | 'stopped';
@@ -27,8 +35,19 @@ let config: Config = loadConfig();
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let quitting = false;
+let configSaveTimer: NodeJS.Timeout | null = null;
 const tiltManager = new TiltManagerSDK(config, {
-  onStatus: (snapshot) => emitStatus(snapshot),
+  onStatusUpdate: (update) => emitStatusUpdate(update),
+  onLogDelta: (delta) => emitLogDelta(delta),
+  onConfigMutated: (mutated) => {
+    config = mutated;
+    // Debounce saves — external env resources update every poll cycle
+    if (configSaveTimer) clearTimeout(configSaveTimer);
+    configSaveTimer = setTimeout(() => {
+      writeConfig(config);
+      mainWindow?.webContents.send('launcher:config-updated', JSON.parse(JSON.stringify(config)));
+    }, 5000);
+  },
 });
 
 if (!app.requestSingleInstanceLock()) {
@@ -77,9 +96,11 @@ function normalizeConfig(raw: Config): Config {
     return {
       ...env,
       id: unique,
+      external: env.external ?? false,
       description: env.description ?? '',
       selectedResources: env.selectedResources ?? [],
       cachedResources: env.cachedResources ?? [],
+      serviceMapping: env.serviceMapping,
     };
   });
   return {
@@ -167,7 +188,7 @@ function ensureWindowVisible(): void {
   mainWindow.focus();
 }
 
-function updateTrayMenu(snapshot: StatusResponse): void {
+function updateTrayMenu(update: StatusUpdate): void {
   if (!tray) return;
   const items: Electron.MenuItemConstructorOptions[] = [
     { label: 'Tilt Launcher', enabled: false },
@@ -176,7 +197,7 @@ function updateTrayMenu(snapshot: StatusResponse): void {
     { type: 'separator' },
   ];
   for (const env of config.environments) {
-    const envStatus = snapshot.envs[env.id];
+    const envStatus = update.envs[env.id];
     const state = envStatus?.status ?? 'stopped';
     items.push({
       label: env.name.toUpperCase(),
@@ -215,7 +236,7 @@ function updateTrayMenu(snapshot: StatusResponse): void {
     checked: app.getLoginItemSettings().openAtLogin,
     click: (menuItem) => {
       app.setLoginItemSettings({ openAtLogin: menuItem.checked });
-      emitStatus();
+      emitStatusUpdate();
     },
   });
   items.push({
@@ -255,11 +276,17 @@ function createTray(): void {
   tray.on('click', () => ensureWindowVisible());
 }
 
-function emitStatus(snapshot?: StatusResponse): void {
-  const next = snapshot ?? tiltManager.currentStatusSnapshot();
+function emitStatusUpdate(update?: StatusUpdate): void {
+  const next = update ?? tiltManager.currentStatusUpdate();
   updateTrayMenu(next);
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('launcher:status-updated', next);
+    mainWindow.webContents.send('launcher:status-update', next);
+  }
+}
+
+function emitLogDelta(delta: LogDelta): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('launcher:log-delta', delta);
   }
 }
 
@@ -380,7 +407,8 @@ function createWindow(): void {
 
 function registerIpcHandlers(): void {
   ipcMain.handle('launcher:get-config', () => config);
-  ipcMain.handle('launcher:get-status', () => tiltManager.currentStatusSnapshot());
+  ipcMain.handle('launcher:get-status', () => tiltManager.currentStatusUpdate());
+  ipcMain.handle('launcher:get-logs', (_event, envId: string) => tiltManager.getEnvLogs(envId));
   ipcMain.handle('launcher:start-env', (_event, envId: string) => tiltManager.startEnv(envId));
   ipcMain.handle('launcher:stop-env', (_event, envId: string) => tiltManager.stopEnv(envId));
   ipcMain.handle('launcher:restart-env', (_event, envId: string) => tiltManager.restartEnv(envId));
@@ -400,7 +428,7 @@ function registerIpcHandlers(): void {
     config = normalized;
     tiltManager.setConfig(config);
     writeConfig(config);
-    emitStatus();
+    emitStatusUpdate();
     return { ok: true };
   });
   ipcMain.handle('launcher:pick-tiltfile', async (): Promise<PickedTiltfile | null> => {
@@ -426,7 +454,7 @@ function registerIpcHandlers(): void {
   });
   ipcMain.handle('launcher:set-login-item', (_event, payload: { openAtLogin: boolean }) => {
     app.setLoginItemSettings({ openAtLogin: payload.openAtLogin });
-    emitStatus();
+    emitStatusUpdate();
     return { ok: true };
   });
   ipcMain.handle('launcher:open-external', (_event, url: string) => shell.openExternal(url));
@@ -491,7 +519,7 @@ app.whenReady().then(() => {
   createTray();
   createWindow();
   tiltManager.startPolling();
-  emitStatus();
+  emitStatusUpdate();
 
   app.on('activate', () => {
     ensureWindowVisible();

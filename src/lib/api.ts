@@ -2,9 +2,10 @@ import type {
   Config,
   DiscoverResult,
   LoginItemSettings,
+  LogDelta,
   PickedTiltfile,
   ReadDirResult,
-  StatusResponse,
+  StatusUpdate,
 } from './types.ts';
 
 type Result = { ok: boolean; error?: string };
@@ -17,8 +18,12 @@ export async function fetchConfig(): Promise<Config> {
   return await bridge().getConfig();
 }
 
-export async function fetchStatus(): Promise<StatusResponse> {
+export async function fetchStatus(): Promise<StatusUpdate> {
   return await bridge().getStatus();
+}
+
+export async function fetchLogs(envId: string): Promise<{ envLogs: string[]; resourceLogs: Record<string, string[]> }> {
+  return await bridge().getLogs(envId);
 }
 
 export async function startEnv(envId: string): Promise<Result> {
@@ -85,7 +90,17 @@ export async function setLoginItemSettings(openAtLogin: boolean): Promise<Result
   return await bridge().setLoginItemSettings(openAtLogin);
 }
 
-export function onStatusUpdated(listener: (status: StatusResponse) => void): () => void {
+export function onStatusUpdate(listener: (update: StatusUpdate) => void): () => void {
   if (!window.tiltLauncher) return () => {};
-  return window.tiltLauncher.onStatusUpdated(listener);
+  return window.tiltLauncher.onStatusUpdate(listener);
+}
+
+export function onLogDelta(listener: (delta: LogDelta) => void): () => void {
+  if (!window.tiltLauncher) return () => {};
+  return window.tiltLauncher.onLogDelta(listener);
+}
+
+export function onConfigUpdated(listener: (config: Config) => void): () => void {
+  if (!window.tiltLauncher) return () => {};
+  return window.tiltLauncher.onConfigUpdated(listener);
 }

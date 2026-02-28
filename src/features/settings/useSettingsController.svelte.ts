@@ -1,18 +1,10 @@
-import {
-  discoverResources,
-  fetchConfig,
-  fetchLoginItemSettings,
-  fetchStatus,
-  saveConfig,
-  setLoginItemSettings,
-} from '$lib/api.ts';
+import { discoverResources, fetchConfig, fetchLoginItemSettings, saveConfig, setLoginItemSettings } from '$lib/api.ts';
 import { DEFAULT_CONFIG_PORT, DEFAULT_TILT_PORT_START, DISCOVERY_TIMEOUT_MS } from '$lib/constants.ts';
-import type { CachedResource, Config, DiscoverResult, Environment, StatusResponse } from '$lib/types.ts';
+import type { CachedResource, Config, DiscoverResult, Environment } from '$lib/types.ts';
 
 interface SettingsControllerOptions {
   getConfig: () => Config | null;
   setConfig: (next: Config) => void;
-  setStatusData: (next: StatusResponse) => void;
   applyTheme: (mode: 'dark' | 'light' | 'system') => void;
   showConfirm: (title: string, body: string) => Promise<boolean>;
   notify: (kind: 'success' | 'error', text: string) => void;
@@ -32,7 +24,6 @@ function defaultPort(nextConfig: Config): number {
 export function useSettingsController({
   getConfig,
   setConfig,
-  setStatusData,
   applyTheme,
   showConfirm,
   notify,
@@ -49,8 +40,8 @@ export function useSettingsController({
   let newEnvName = $state('');
   let newEnvDescription = $state('');
   let newTiltPort = $state(0);
+  let newEnvExternal = $state(false);
   let discoverResult: DiscoverResult | null = $state(null);
-  let selectedDiscovery = $state<Record<string, boolean>>({});
   let discovering = $state(false);
   let discoveryElapsed = $state(0);
   let discoveryTimer: ReturnType<typeof setInterval> | null = null;
@@ -66,12 +57,12 @@ export function useSettingsController({
     draftConfig.themeMode = draftConfig.themeMode ?? 'system';
     newTiltPort = defaultPort(draftConfig);
     discoverResult = null;
-    selectedDiscovery = {};
     newTiltfilePath = '';
     newTiltfileIsSymlink = false;
     pickerKey += 1;
     newEnvName = '';
     newEnvDescription = '';
+    newEnvExternal = false;
     settingsMessage = '';
     settingsMessageKind = '';
     void fetchLoginItemSettings().then((settings) => {
@@ -104,13 +95,7 @@ export function useSettingsController({
       notifySettings('error', 'Select a Tiltfile and port before discovery.');
       return;
     }
-    const confirmed = await showConfirm(
-      'Run Tiltfile discovery?',
-      `Tilt Launcher will execute this Tiltfile:\n\n${newTiltfilePath}\n\nThis can run shell commands and start resources.`,
-    );
-    if (!confirmed) return;
     discoverResult = null;
-    selectedDiscovery = {};
     discoveryElapsed = 0;
     discovering = true;
     discoveryTimer = setInterval(() => {
@@ -122,11 +107,6 @@ export function useSettingsController({
         tiltPort: newTiltPort,
         timeoutMs: DISCOVERY_TIMEOUT_MS,
       });
-      selectedDiscovery = {};
-      for (const resource of discoverResult.resources) {
-        const defaultSelected = Boolean(resource.port) && resource.runtimeStatus !== 'not_applicable';
-        selectedDiscovery[resource.name] = defaultSelected;
-      }
     } finally {
       discovering = false;
       if (discoveryTimer) {
@@ -163,11 +143,9 @@ export function useSettingsController({
     let idx = 2;
     while (ids[id]) id = `${idBase}-${idx++}`;
 
-    const selectedResources = discoverResult.resources
-      .filter((resource) => selectedDiscovery[resource.name])
-      .map((resource) => resource.name);
+    const selectedResources = discoverResult.resources.map((resource) => resource.name);
     if (selectedResources.length === 0) {
-      notify('error', 'Select at least one service/resource to show in the app.');
+      notify('error', 'No resources found to add.');
       return;
     }
 
@@ -191,9 +169,60 @@ export function useSettingsController({
     pickerKey += 1;
     newEnvName = '';
     newEnvDescription = '';
+    newEnvExternal = false;
     newTiltPort = defaultPort(draftConfig);
     discoverResult = null;
-    selectedDiscovery = {};
+  }
+
+  /** Adds a port-only external environment (no Tiltfile, no discovery). */
+  function addExternalEnvironment(): void {
+    if (!draftConfig) return;
+    if (!newEnvName.trim()) {
+      notify('error', 'Enter a display name for the environment.');
+      return;
+    }
+    if (!newTiltPort || newTiltPort <= 0) {
+      notify('error', 'Enter a valid Tilt port.');
+      return;
+    }
+    const inUse: Record<number, true> = {};
+    for (const env of draftConfig.environments) inUse[env.tiltPort] = true;
+    if (inUse[newTiltPort]) {
+      notify('error', `Tilt port ${newTiltPort} is already in use by another environment.`);
+      return;
+    }
+
+    const normalizedName = newEnvName.trim();
+    const idBase =
+      normalizedName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '') || 'env';
+    const ids: Record<string, true> = {};
+    for (const env of draftConfig.environments) ids[env.id] = true;
+    let id = idBase;
+    let idx = 2;
+    while (ids[id]) id = `${idBase}-${idx++}`;
+
+    draftConfig.environments = [
+      ...draftConfig.environments,
+      {
+        id,
+        name: normalizedName,
+        external: true,
+        repoDir: '',
+        tiltfile: '',
+        tiltPort: newTiltPort,
+        description: newEnvDescription.trim(),
+        selectedResources: [],
+        cachedResources: [],
+      },
+    ];
+
+    newEnvName = '';
+    newEnvDescription = '';
+    newEnvExternal = false;
+    newTiltPort = defaultPort(draftConfig);
   }
 
   function removeEnvironment(envId: string): void {
@@ -274,7 +303,6 @@ export function useSettingsController({
       const nextConfig = await fetchConfig();
       setConfig(nextConfig);
       applyTheme(nextConfig.themeMode ?? 'system');
-      setStatusData(await fetchStatus());
       showSettings = false;
       notify('success', 'Settings saved.');
     } catch (error) {
@@ -328,11 +356,14 @@ export function useSettingsController({
     set newTiltPort(value: number) {
       newTiltPort = value;
     },
+    get newEnvExternal(): boolean {
+      return newEnvExternal;
+    },
+    set newEnvExternal(value: boolean) {
+      newEnvExternal = value;
+    },
     get discoverResult(): DiscoverResult | null {
       return discoverResult;
-    },
-    get selectedDiscovery(): Record<string, boolean> {
-      return selectedDiscovery;
     },
     get discovering(): boolean {
       return discovering;
@@ -345,14 +376,12 @@ export function useSettingsController({
       draftConfig.themeMode = mode;
       applyTheme(mode);
     },
-    setDiscoverySelection(resourceName: string, selected: boolean): void {
-      selectedDiscovery[resourceName] = selected;
-    },
     openSettings,
     closeSettings,
     handleTiltfilePick,
     runDiscovery,
     addDiscoveredEnvironment,
+    addExternalEnvironment,
     removeEnvironment,
     updateDraftEnvironment,
     rediscover,

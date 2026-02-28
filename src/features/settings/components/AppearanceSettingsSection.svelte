@@ -1,6 +1,6 @@
 <script lang="ts">
   import * as Field from '$lib/components/ui/field/index.js';
-  import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
+  import * as Select from '$lib/components/ui/select/index.js';
   import Moon from '@lucide/svelte/icons/moon';
   import Sun from '@lucide/svelte/icons/sun';
   import Monitor from '@lucide/svelte/icons/monitor';
@@ -13,55 +13,60 @@
   }
 
   let { themeMode, launchAtLogin, onThemeModeChange, onLaunchAtLoginChange }: Props = $props();
+
+  const themeOptions = [
+    { value: 'dark', label: 'Dark' },
+    { value: 'light', label: 'Light' },
+    { value: 'system', label: 'System' },
+  ] as const;
+
+  let selectedTheme = $derived(themeOptions.find((o) => o.value === themeMode) ?? themeOptions[2]);
 </script>
 
-<Field.Set>
-  <Field.Label for="appearance-theme-mode">Appearance</Field.Label>
-  <Field.Description>Choose your preferred theme mode.</Field.Description>
-  <Field.Group>
-    <Field.Field>
-      <RadioGroup.Root
-        id="appearance-theme-mode"
-        value={themeMode}
-        onValueChange={(value) => onThemeModeChange((value || 'system') as 'dark' | 'light' | 'system')}
-      >
-        <Field.Label for="theme-mode-dark">
-          <Field.Field orientation="horizontal">
-            <Field.Content>
-              <Field.Title class="inline-flex items-center gap-2"><Moon class="h-4 w-4" />Dark</Field.Title>
-              <Field.Description>Always use the dark theme.</Field.Description>
-            </Field.Content>
-            <RadioGroup.Item id="theme-mode-dark" value="dark" />
-          </Field.Field>
-        </Field.Label>
-        <Field.Label for="theme-mode-light">
-          <Field.Field orientation="horizontal">
-            <Field.Content>
-              <Field.Title class="inline-flex items-center gap-2"><Sun class="h-4 w-4" />Light</Field.Title>
-              <Field.Description>Always use the light theme.</Field.Description>
-            </Field.Content>
-            <RadioGroup.Item id="theme-mode-light" value="light" />
-          </Field.Field>
-        </Field.Label>
-        <Field.Label for="theme-mode-system">
-          <Field.Field orientation="horizontal">
-            <Field.Content>
-              <Field.Title class="inline-flex items-center gap-2"><Monitor class="h-4 w-4" />System</Field.Title>
-              <Field.Description>Match your operating system preference.</Field.Description>
-            </Field.Content>
-            <RadioGroup.Item id="theme-mode-system" value="system" />
-          </Field.Field>
-        </Field.Label>
-      </RadioGroup.Root>
-    </Field.Field>
-    <Field.Field orientation="horizontal">
-      <Field.Label for="launch-at-login">Launch at login</Field.Label>
-      <Field.Switch
-        id="launch-at-login"
-        checked={launchAtLogin}
-        aria-label="Launch at login"
-        onclick={() => onLaunchAtLoginChange(!launchAtLogin)}
-      />
-    </Field.Field>
-  </Field.Group>
-</Field.Set>
+<Field.Group>
+  <Field.Field orientation="horizontal">
+    <Field.Content>
+      <Field.Label for="appearance-theme-mode">Theme</Field.Label>
+    </Field.Content>
+    <Select.Root
+      type="single"
+      value={{ value: selectedTheme.value, label: selectedTheme.label }}
+      onValueChange={(val) => {
+        if (val === 'dark' || val === 'light' || val === 'system') onThemeModeChange(val);
+      }}
+    >
+      <Select.Trigger id="appearance-theme-mode" class="h-8 w-[140px]">
+        <span class="inline-flex items-center gap-2">
+          {#if themeMode === 'dark'}
+            <Moon class="h-3.5 w-3.5" />
+          {:else if themeMode === 'light'}
+            <Sun class="h-3.5 w-3.5" />
+          {:else}
+            <Monitor class="h-3.5 w-3.5" />
+          {/if}
+          {selectedTheme.label}
+        </span>
+      </Select.Trigger>
+      <Select.Content>
+        <Select.Item value="dark" label="Dark">
+          <span class="inline-flex items-center gap-2"><Moon class="h-3.5 w-3.5" />Dark</span>
+        </Select.Item>
+        <Select.Item value="light" label="Light">
+          <span class="inline-flex items-center gap-2"><Sun class="h-3.5 w-3.5" />Light</span>
+        </Select.Item>
+        <Select.Item value="system" label="System">
+          <span class="inline-flex items-center gap-2"><Monitor class="h-3.5 w-3.5" />System</span>
+        </Select.Item>
+      </Select.Content>
+    </Select.Root>
+  </Field.Field>
+  <Field.Field orientation="horizontal">
+    <Field.Label for="launch-at-login">Launch at login</Field.Label>
+    <Field.Switch
+      id="launch-at-login"
+      checked={launchAtLogin}
+      aria-label="Launch at login"
+      onclick={() => onLaunchAtLoginChange(!launchAtLogin)}
+    />
+  </Field.Field>
+</Field.Group>

@@ -19,7 +19,7 @@
     if (!nextOpen) onCancel();
   }}
 >
-  <Dialog.Content showCloseButton={false} class="max-w-sm gap-0 p-0">
+  <Dialog.Content showCloseButton={false} class="z-[60] max-w-sm gap-0 p-0" portalProps={{ class: 'z-[60]' }}>
     <div class="px-6 pt-6 pb-4">
       <Dialog.Header>
         <Dialog.Title>{title}</Dialog.Title>

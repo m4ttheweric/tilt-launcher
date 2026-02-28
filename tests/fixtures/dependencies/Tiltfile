@@ -1,0 +1,23 @@
+# Fixture: dependencies
+#
+# Two resources where 'app' depends on 'setup' via resource_deps.
+# Used to test: waitingReason, waitingOn fields.
+
+local_resource(
+  'setup',
+  cmd='sleep 1 && echo "setup done"',
+  labels=['infra'],
+)
+
+local_resource(
+  'app',
+  serve_cmd='python3 -m http.server 18767',
+  resource_deps=['setup'],
+  readiness_probe=probe(
+    http_get=http_get_action(port=18767),
+    initial_delay_secs=2,
+    period_secs=2,
+    failure_threshold=10,
+  ),
+  labels=['services'],
+)

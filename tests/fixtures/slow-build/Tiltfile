@@ -1,0 +1,16 @@
+# Fixture: slow-build
+#
+# A cmd resource that takes time to complete (simulates slow build).
+# Used to test: updateStatus transitions, lastBuildDuration > 0.
+
+local_resource(
+  'slow-task',
+  cmd='sleep 2 && echo "slow task done"',
+  labels=['tasks'],
+)
+
+local_resource(
+  'fast-task',
+  cmd='echo "fast task done"',
+  labels=['tasks'],
+)

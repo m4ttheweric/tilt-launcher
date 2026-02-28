@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Config, Environment, StatusResponse } from '$lib/types.ts';
+  import type { Config, Environment, ServiceMapping } from '$lib/types.ts';
   import { BROWSER_PANE_MIN_WIDTH_PX, MAIN_PANE_MIN_WIDTH_PX } from '$lib/constants.ts';
   import SplitterHandle from '$lib/components/SplitterHandle.svelte';
   import TiltfileEnvironmentsPane from '../../tiltfiles/components/TiltfileEnvironmentsPane.svelte';
@@ -9,7 +9,6 @@
 
   interface Props {
     config: Config | null;
-    statusData: StatusResponse;
     selectedEnv: Environment | null;
     selectedEnvStatus: string;
     launcher: LauncherState;
@@ -20,13 +19,13 @@
     onEnableResource: (envId: string, resourceName: string) => void | Promise<void>;
     onDisableResource: (envId: string, resourceName: string) => void | Promise<void>;
     onOpenExternal: (url: string) => void | Promise<void>;
+    onSaveMapping: (envId: string, mapping: ServiceMapping) => void;
     onStartVerticalResize: (event: MouseEvent) => void;
     onStartHorizontalResize: (event: MouseEvent) => void;
   }
 
   let {
     config,
-    statusData,
     selectedEnv,
     selectedEnvStatus,
     launcher,
@@ -37,9 +36,12 @@
     onEnableResource,
     onDisableResource,
     onOpenExternal,
+    onSaveMapping,
     onStartVerticalResize,
     onStartHorizontalResize,
   }: Props = $props();
+
+  let outputPaneRef: OutputPane | undefined = $state();
 </script>
 
 <div
@@ -56,9 +58,7 @@
   >
     <TiltfileEnvironmentsPane
       {config}
-      {statusData}
       rightPaneCollapsed={launcher.rightPaneCollapsed}
-      onOpenTilt={launcher.openTilt}
       {onStart}
       {onStop}
       {onRestart}
@@ -66,6 +66,8 @@
       {onEnableResource}
       {onDisableResource}
       {onOpenExternal}
+      {onSaveMapping}
+      onShowServiceLogs={(envId, serviceName) => outputPaneRef?.showServiceInLogs(envId, serviceName)}
     />
 
     {#if !launcher.rightPaneCollapsed}
@@ -98,8 +100,8 @@
   </div>
 
   <OutputPane
+    bind:this={outputPaneRef}
     {config}
-    {statusData}
     activeLogEnvId={launcher.activeLogEnvId}
     logsCollapsed={launcher.logsCollapsed}
     onStartResize={onStartHorizontalResize}

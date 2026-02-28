@@ -55,3 +55,89 @@ html {
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
+
+/* ANSI terminal color classes (used by ansi_up) */
+.ansi-black-fg {
+  color: #555;
+}
+.ansi-red-fg {
+  color: #f87171;
+}
+.ansi-green-fg {
+  color: #4ade80;
+}
+.ansi-yellow-fg {
+  color: #facc15;
+}
+.ansi-blue-fg {
+  color: #60a5fa;
+}
+.ansi-magenta-fg {
+  color: #c084fc;
+}
+.ansi-cyan-fg {
+  color: #22d3ee;
+}
+.ansi-white-fg {
+  color: #e5e5e5;
+}
+
+.ansi-bright-black-fg {
+  color: #737373;
+}
+.ansi-bright-red-fg {
+  color: #fca5a5;
+}
+.ansi-bright-green-fg {
+  color: #86efac;
+}
+.ansi-bright-yellow-fg {
+  color: #fde68a;
+}
+.ansi-bright-blue-fg {
+  color: #93c5fd;
+}
+.ansi-bright-magenta-fg {
+  color: #d8b4fe;
+}
+.ansi-bright-cyan-fg {
+  color: #67e8f9;
+}
+.ansi-bright-white-fg {
+  color: #fff;
+}
+
+.ansi-black-bg {
+  background-color: #555;
+}
+.ansi-red-bg {
+  background-color: #991b1b;
+}
+.ansi-green-bg {
+  background-color: #166534;
+}
+.ansi-yellow-bg {
+  background-color: #854d0e;
+}
+.ansi-blue-bg {
+  background-color: #1e40af;
+}
+.ansi-magenta-bg {
+  background-color: #6b21a8;
+}
+.ansi-cyan-bg {
+  background-color: #155e75;
+}
+.ansi-white-bg {
+  background-color: #e5e5e5;
+}
+
+.ansi-bold {
+  font-weight: bold;
+}
+.ansi-italic {
+  font-style: italic;
+}
+.ansi-underline {
+  text-decoration: underline;
+}

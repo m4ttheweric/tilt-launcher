@@ -1,0 +1,35 @@
+# Fixture: multi-resource
+#
+# Multiple cmd resources with different labels + a second serve resource.
+# Used to test: category assignment from labels, multi-resource discovery,
+# that operations work correctly in a more complex env.
+
+local_resource(
+  'batch-a',
+  cmd='echo "batch job A complete"',
+  labels=['batch'],
+)
+
+local_resource(
+  'batch-b',
+  cmd='echo "batch job B complete"',
+  labels=['batch'],
+)
+
+local_resource(
+  'setup-step',
+  cmd='echo "setup complete"',
+  labels=['on-demand'],
+)
+
+local_resource(
+  'alt-server',
+  serve_cmd='python3 -m http.server 18766',
+  readiness_probe=probe(
+    http_get=http_get_action(port=18766),
+    initial_delay_secs=2,
+    period_secs=2,
+    failure_threshold=10,
+  ),
+  labels=['services'],
+)
