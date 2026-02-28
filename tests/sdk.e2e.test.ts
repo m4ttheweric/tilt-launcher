@@ -94,7 +94,6 @@ describe('SDK — basic fixture', () => {
   const FIXTURE_DIR = join(FIXTURES, 'basic');
 
   const config: Config = {
-    port: 10400,
     environments: [
       {
         id: ENV_ID,
@@ -342,7 +341,6 @@ describe('SDK — multi-resource fixture', () => {
   const FIXTURE_DIR = join(FIXTURES, 'multi-resource');
 
   const config: Config = {
-    port: 10400,
     environments: [
       {
         id: ENV_ID,
@@ -493,7 +491,6 @@ describe('SDK — slow-build fixture', () => {
   const FIXTURE_DIR = join(FIXTURES, 'slow-build');
 
   const config: Config = {
-    port: 10400,
     environments: [
       {
         id: ENV_ID,
@@ -586,7 +583,6 @@ describe('SDK — dependencies fixture', () => {
   const FIXTURE_DIR = join(FIXTURES, 'dependencies');
 
   const config: Config = {
-    port: 10400,
     environments: [
       {
         id: ENV_ID,

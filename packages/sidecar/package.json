@@ -1,0 +1,13 @@
+{
+  "name": "@tilt-launcher/sidecar",
+  "version": "1.2.0",
+  "type": "module",
+  "main": "src/main.ts",
+  "scripts": {
+    "dev": "bun run src/main.ts",
+    "build": "bun build src/main.ts --compile --outfile dist/tilt-sidecar"
+  },
+  "dependencies": {
+    "@tilt-launcher/sdk": "workspace:*"
+  }
+}

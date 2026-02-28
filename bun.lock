@@ -50,6 +50,13 @@
         "@tauri-apps/cli": "^2",
       },
     },
+    "packages/sidecar": {
+      "name": "@tilt-launcher/sidecar",
+      "version": "1.2.0",
+      "dependencies": {
+        "@tilt-launcher/sdk": "workspace:*",
+      },
+    },
     "packages/ui": {
       "name": "@tilt-launcher/ui",
       "version": "1.2.0",
@@ -413,6 +420,8 @@
     "@tilt-launcher/shell-electron": ["@tilt-launcher/shell-electron@workspace:packages/shell-electron"],
 
     "@tilt-launcher/shell-tauri": ["@tilt-launcher/shell-tauri@workspace:packages/shell-tauri"],
+
+    "@tilt-launcher/sidecar": ["@tilt-launcher/sidecar@workspace:packages/sidecar"],
 
     "@tilt-launcher/ui": ["@tilt-launcher/ui@workspace:packages/ui"],
 

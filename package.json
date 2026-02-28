@@ -17,6 +17,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test:sdk": "bun test tests/sdk.e2e.test.ts --timeout 120000",
+    "test:sidecar": "bun run build:sidecar && bun test tests/sidecar.e2e.test.ts --timeout 120000",
+    "build:sidecar": "bun run --filter @tilt-launcher/sidecar build",
     "package:app": "bun package-app.ts",
     "package:dmg": "./package-dmg.sh",
     "install:app": "bun install.ts",
