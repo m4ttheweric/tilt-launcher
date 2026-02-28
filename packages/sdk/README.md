@@ -12,6 +12,58 @@ npm install @tilt-launcher/sdk
 
 ## Quick Start
 
+### One-Shot Query (CLI tools, CI, health checks)
+
+```ts
+import { queryTilt } from '@tilt-launcher/sdk';
+
+const status = await queryTilt(10350);
+if (!status.allHealthy) {
+  for (const err of status.errors) {
+    console.error(`${err.name}: ${err.lastBuildError ?? err.runtimeStatus}`);
+  }
+  process.exit(1);
+}
+console.log(`All ${status.healthy.length} resources healthy`);
+```
+
+### Streaming (dashboards, monitoring)
+
+```ts
+import { watchTilt } from '@tilt-launcher/sdk';
+
+const stop = await watchTilt(10350, (event) => {
+  for (const r of event.resources) {
+    if (r.runtimeStatus === 'error') console.error(`${r.name} failed!`);
+  }
+  for (const log of event.logs) {
+    console.log(`[${log.resourceName ?? 'system'}] ${log.text}`);
+  }
+});
+
+// Stop watching when done
+setTimeout(stop, 60_000);
+```
+
+### Full Client (multiple operations)
+
+```ts
+import { TiltClient } from '@tilt-launcher/sdk';
+
+const tilt = new TiltClient(10350);
+
+if (await tilt.isReachable()) {
+  const resources = await tilt.getResources();
+  const status = await tilt.getStatus();
+  const myService = await tilt.getResource('my-service');
+  await tilt.triggerResource('my-service');
+}
+
+tilt.close();
+```
+
+### Full Manager (multi-env orchestration)
+
 ```ts
 import { TiltManagerSDK } from '@tilt-launcher/sdk';
 import type { Config, StatusUpdate, LogDelta } from '@tilt-launcher/sdk';
@@ -31,34 +83,35 @@ const config: Config = {
 };
 
 const sdk = new TiltManagerSDK(config, {
-  onStatusUpdate: (update: StatusUpdate) => {
-    console.log('Status:', update.envs);
-  },
-  onLogDelta: (delta: LogDelta) => {
-    console.log('Logs:', delta);
-  },
+  onStatusUpdate: (update: StatusUpdate) => console.log('Status:', update.envs),
+  onLogDelta: (delta: LogDelta) => console.log('Logs:', delta),
 });
 
-// Start polling the Tilt API
 sdk.startPolling(5000);
-
-// Start an environment
 await sdk.startEnv('my-app');
-
-// Get current status
-const status = sdk.currentStatusUpdate();
-
-// Control resources
-await sdk.triggerResource('my-app', 'web-server');
-await sdk.disableResource('my-app', 'slow-service');
-await sdk.enableResource('my-app', 'slow-service');
-
-// Stop
-await sdk.stopEnv('my-app');
-sdk.stopPolling();
 ```
 
 ## API
+
+### `queryTilt(port, options?)` → `Promise<TiltStatus>`
+
+One-shot: fetch all resources and return a structured status summary. No cleanup needed.
+
+### `watchTilt(port, callback, options?)` → `Promise<() => void>`
+
+Stream resource + log updates via WebSocket. Returns an unsubscribe function.
+
+### `TiltClient`
+
+| Method                  | Description                               |
+| ----------------------- | ----------------------------------------- |
+| `isReachable()`         | Check if Tilt is running at this port     |
+| `getResources()`        | Fetch all resource statuses               |
+| `getStatus()`           | Fetch resources as a `TiltStatus` summary |
+| `getResource(name)`     | Get a single resource by name             |
+| `triggerResource(name)` | Trigger a resource update                 |
+| `watch(callback)`       | Subscribe to WebSocket updates            |
+| `close()`               | Close all connections                     |
 
 ### `TiltManagerSDK`
 
@@ -77,28 +130,24 @@ sdk.stopPolling();
 | `startPolling(intervalMs)`     | Start polling Tilt APIs            |
 | `stopPolling()`                | Stop polling                       |
 
-### Types
+### Key Types
 
-- `Config` — app configuration with environment list
-- `Environment` — a single Tilt environment definition
-- `StatusUpdate` — full status snapshot (all envs + resources)
-- `ResourceRow` — individual resource status (health, pid, labels, etc.)
-- `LogDelta` — incremental log update
-- `DiscoverResult` — result of resource discovery
-- `LauncherBridge` — abstract UI bridge interface
-
-### Callbacks
-
-| Callback          | Fires when                                               |
-| ----------------- | -------------------------------------------------------- |
-| `onStatusUpdate`  | Tilt API poll returns new data                           |
-| `onLogDelta`      | New log lines arrive via WebSocket                       |
-| `onConfigMutated` | SDK internally modifies config (e.g., caching resources) |
+| Type             | Description                                           |
+| ---------------- | ----------------------------------------------------- |
+| `TiltResource`   | Single resource from `TiltClient` (name, status, etc) |
+| `TiltStatus`     | Status summary: resources, errors, healthy, pending   |
+| `TiltWatchEvent` | WebSocket event: resources + logs                     |
+| `ResourceRow`    | Resource from `TiltManagerSDK` (includes health)      |
+| `StatusUpdate`   | Full status snapshot from `TiltManagerSDK`            |
+| `LogDelta`       | Incremental log update                                |
+| `Config`         | App configuration with environment list               |
+| `Environment`    | Single Tilt environment definition                    |
+| `LauncherBridge` | Abstract UI bridge interface                          |
 
 ## Requirements
 
-- `tilt` must be on `$PATH`
 - Node.js ≥ 18 or Bun
+- `tilt` on `$PATH` (only required for `TiltManagerSDK`; `TiltClient` uses HTTP)
 
 ## License
 

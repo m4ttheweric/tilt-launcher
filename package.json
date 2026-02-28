@@ -20,6 +20,7 @@
     "format:check": "prettier --check .",
     "test:sdk": "bun test tests/sdk.e2e.test.ts --timeout 120000",
     "test:sidecar": "bun run build:sidecar && bun test tests/sidecar.e2e.test.ts --timeout 120000",
+    "test:client": "bun test tests/tiltClient.e2e.test.ts --timeout 120000",
     "build:sdk": "bun run --filter @tilt-launcher/sdk build",
     "build:sidecar": "bun run --filter @tilt-launcher/sidecar build",
     "build:packages": "bun run build:sdk && bun run build:sidecar",

@@ -19,7 +19,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "bun build src/index.ts src/types.ts src/bridge.ts src/tiltManagerSDK.ts --outdir dist --target node && tsc -p tsconfig.build.json",
+    "build": "bun build src/index.ts src/types.ts src/bridge.ts src/tiltManagerSDK.ts src/tiltClient.ts --outdir dist --target node && tsc -p tsconfig.build.json",
     "check": "tsc --noEmit -p tsconfig.json",
     "prepublishOnly": "bun run check && bun run build"
   },
