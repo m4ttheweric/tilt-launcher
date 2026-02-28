@@ -1,4 +1,5 @@
 use crate::config;
+use crate::sidecar::SidecarManager;
 use crate::types::*;
 use std::fs;
 use std::path::Path;
@@ -7,6 +8,7 @@ use tauri::State;
 
 pub struct AppState {
     pub config: Mutex<Config>,
+    pub sidecar: SidecarManager,
 }
 
 // ── Config commands ──────────────────────────────────────────────────
@@ -23,7 +25,14 @@ pub fn save_config(state: State<AppState>, config: Config) -> CommandResult {
         return CommandResult::fail(msg);
     }
     config::write_config(&normalized);
-    *state.config.lock().unwrap() = normalized;
+    *state.config.lock().unwrap() = normalized.clone();
+
+    // Also update the sidecar's config so it stays in sync
+    let _ = state.sidecar.call(
+        "saveConfig",
+        serde_json::json!({ "config": normalized }),
+    );
+
     CommandResult::success()
 }
 
@@ -137,7 +146,7 @@ pub fn classify_tiltfile_path(file_path: String) -> PickedTiltfile {
         }
     }
 
-    // Try reverse-mapping through symlinks (like the Electron version)
+    // Try reverse-mapping through symlinks
     if let Some(symlink_path) = find_symlink_for(&expanded) {
         return PickedTiltfile {
             path: symlink_path,
@@ -153,57 +162,75 @@ pub fn classify_tiltfile_path(file_path: String) -> PickedTiltfile {
     }
 }
 
-// ── SDK stubs (Phase 2 — sidecar) ───────────────────────────────────
+// ── SDK commands — proxied to sidecar ───────────────────────────────
 
 #[tauri::command]
-pub fn get_status() -> StatusUpdate {
-    StatusUpdate::default()
+pub fn get_status(state: State<AppState>) -> serde_json::Value {
+    match state.sidecar.call("getStatus", serde_json::json!({})) {
+        Ok(v) => v,
+        Err(e) => serde_json::json!({ "envs": {}, "error": e }),
+    }
 }
 
 #[tauri::command]
-pub fn get_logs(env_id: String) -> serde_json::Value {
-    let _ = env_id;
-    serde_json::json!({ "envLogs": [], "resourceLogs": {} })
+pub fn get_logs(state: State<AppState>, env_id: String) -> serde_json::Value {
+    match state.sidecar.call("getLogs", serde_json::json!({ "envId": env_id })) {
+        Ok(v) => v,
+        Err(e) => serde_json::json!({ "envLogs": [], "resourceLogs": {}, "error": e }),
+    }
 }
 
 #[tauri::command]
-pub fn start_env(env_id: String) -> CommandResult {
-    let _ = env_id;
-    CommandResult::fail("Sidecar not yet implemented — use Electron shell for now")
+pub fn start_env(state: State<AppState>, env_id: String) -> serde_json::Value {
+    match state.sidecar.call("startEnv", serde_json::json!({ "envId": env_id })) {
+        Ok(v) => v,
+        Err(e) => serde_json::json!({ "ok": false, "error": e }),
+    }
 }
 
 #[tauri::command]
-pub fn stop_env(env_id: String) -> CommandResult {
-    let _ = env_id;
-    CommandResult::fail("Sidecar not yet implemented — use Electron shell for now")
+pub fn stop_env(state: State<AppState>, env_id: String) -> serde_json::Value {
+    match state.sidecar.call("stopEnv", serde_json::json!({ "envId": env_id })) {
+        Ok(v) => v,
+        Err(e) => serde_json::json!({ "ok": false, "error": e }),
+    }
 }
 
 #[tauri::command]
-pub fn restart_env(env_id: String) -> CommandResult {
-    let _ = env_id;
-    CommandResult::fail("Sidecar not yet implemented — use Electron shell for now")
+pub fn restart_env(state: State<AppState>, env_id: String) -> serde_json::Value {
+    match state.sidecar.call("restartEnv", serde_json::json!({ "envId": env_id })) {
+        Ok(v) => v,
+        Err(e) => serde_json::json!({ "ok": false, "error": e }),
+    }
 }
 
 #[tauri::command]
-pub fn trigger_resource(env_id: String, resource_name: String) -> CommandResult {
-    let _ = (env_id, resource_name);
-    CommandResult::fail("Sidecar not yet implemented")
+pub fn trigger_resource(state: State<AppState>, env_id: String, resource_name: String) -> serde_json::Value {
+    match state.sidecar.call("triggerResource", serde_json::json!({ "envId": env_id, "resourceName": resource_name })) {
+        Ok(v) => v,
+        Err(e) => serde_json::json!({ "ok": false, "error": e }),
+    }
 }
 
 #[tauri::command]
-pub fn enable_resource(env_id: String, resource_name: String) -> CommandResult {
-    let _ = (env_id, resource_name);
-    CommandResult::fail("Sidecar not yet implemented")
+pub fn enable_resource(state: State<AppState>, env_id: String, resource_name: String) -> serde_json::Value {
+    match state.sidecar.call("enableResource", serde_json::json!({ "envId": env_id, "resourceName": resource_name })) {
+        Ok(v) => v,
+        Err(e) => serde_json::json!({ "ok": false, "error": e }),
+    }
 }
 
 #[tauri::command]
-pub fn disable_resource(env_id: String, resource_name: String) -> CommandResult {
-    let _ = (env_id, resource_name);
-    CommandResult::fail("Sidecar not yet implemented")
+pub fn disable_resource(state: State<AppState>, env_id: String, resource_name: String) -> serde_json::Value {
+    match state.sidecar.call("disableResource", serde_json::json!({ "envId": env_id, "resourceName": resource_name })) {
+        Ok(v) => v,
+        Err(e) => serde_json::json!({ "ok": false, "error": e }),
+    }
 }
 
 #[tauri::command]
 pub fn get_login_item() -> LoginItemSettings {
+    // macOS login items require LaunchAgent plist — stub for now
     LoginItemSettings {
         open_at_login: false,
     }
@@ -212,22 +239,26 @@ pub fn get_login_item() -> LoginItemSettings {
 #[tauri::command]
 pub fn set_login_item(open_at_login: bool) -> CommandResult {
     let _ = open_at_login;
-    // macOS login items require LaunchAgent plist — Phase 3
     CommandResult::success()
 }
 
 #[tauri::command]
 pub fn discover_resources(
+    state: State<AppState>,
     tiltfile_path: String,
     tilt_port: u16,
     timeout_ms: Option<u64>,
-) -> DiscoverResult {
-    let _ = (tiltfile_path, tilt_port, timeout_ms);
-    DiscoverResult {
-        ok: false,
-        resources: vec![],
-        logs: vec![],
-        error: Some("Sidecar not yet implemented".into()),
+) -> serde_json::Value {
+    let mut params = serde_json::json!({
+        "tiltfilePath": tiltfile_path,
+        "tiltPort": tilt_port,
+    });
+    if let Some(ms) = timeout_ms {
+        params["timeoutMs"] = serde_json::json!(ms);
+    }
+    match state.sidecar.call("discoverResources", params) {
+        Ok(v) => v,
+        Err(e) => serde_json::json!({ "ok": false, "resources": [], "logs": [], "error": e }),
     }
 }
 

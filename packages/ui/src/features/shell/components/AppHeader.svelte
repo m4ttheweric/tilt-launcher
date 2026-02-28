@@ -15,7 +15,10 @@
   let { message, messageKind, themeMode, onCycleThemeMode, onOpenSettings }: Props = $props();
 </script>
 
-<header data-tauri-drag-region class="drag-region flex h-10 shrink-0 items-center justify-between border-b border-border pr-2 pl-20">
+<header
+  data-tauri-drag-region
+  class="drag-region flex h-10 shrink-0 items-center justify-between border-b border-border pr-2 pl-20"
+>
   <div class="pointer-events-none flex items-center gap-2">
     <h1 class="text-sm leading-none font-semibold">Tilt Launcher</h1>
     <span class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">v{__APP_VERSION__}</span>

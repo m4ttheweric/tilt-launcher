@@ -1,10 +1,42 @@
 {
   "name": "@tilt-launcher/sdk",
   "version": "1.2.0",
+  "description": "SDK for managing Tilt dev environments — start, stop, monitor, and control resources",
   "type": "module",
-  "main": "src/index.ts",
-  "types": "src/index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "bun": "./src/index.ts",
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "src",
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "bun build src/index.ts src/types.ts src/bridge.ts src/tiltManagerSDK.ts --outdir dist --target node && tsc -p tsconfig.build.json",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "prepublishOnly": "bun run check && bun run build"
+  },
+  "keywords": [
+    "tilt",
+    "tiltfile",
+    "devtools",
+    "sdk",
+    "launcher"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/m4ttheweric/tilt-launcher",
+    "directory": "packages/sdk"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

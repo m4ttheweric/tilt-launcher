@@ -1,129 +1,163 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, Tray, nativeImage, shell, type NativeImage } from 'electron';
 import { electronApp, optimizer } from '@electron-toolkit/utils';
-import {
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readFileSync,
-  readlinkSync,
-  readdirSync,
-  realpathSync,
-  renameSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs';
-import { basename, dirname, join, relative } from 'node:path';
-import { homedir } from 'node:os';
-import type {
-  Config,
-  DirEntry,
-  LogDelta,
-  PickedTiltfile,
-  ReadDirResult,
-  ResourceRow,
-  StatusUpdate,
-} from '@tilt-launcher/sdk';
-import { TiltManagerSDK } from '@tilt-launcher/sdk';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { spawn, type ChildProcess } from 'node:child_process';
+import type { Config, LogDelta, PickedTiltfile, ResourceRow, StatusUpdate } from '@tilt-launcher/sdk';
 
 type EnvState = 'running' | 'starting' | 'stopped';
 
-const CONFIG_DIR = join(homedir(), '.config', 'tilt-launcher');
-const CONFIG_PATH = process.env.TILT_LAUNCHER_CONFIG || join(CONFIG_DIR, 'config.json');
-
-let config: Config = loadConfig();
+let config: Config = { environments: [] };
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let quitting = false;
-let configSaveTimer: NodeJS.Timeout | null = null;
-const tiltManager = new TiltManagerSDK(config, {
-  onStatusUpdate: (update) => emitStatusUpdate(update),
-  onLogDelta: (delta) => emitLogDelta(delta),
-  onConfigMutated: (mutated) => {
-    config = mutated;
-    // Debounce saves — external env resources update every poll cycle
-    if (configSaveTimer) clearTimeout(configSaveTimer);
-    configSaveTimer = setTimeout(() => {
-      writeConfig(config);
-      mainWindow?.webContents.send('launcher:config-updated', JSON.parse(JSON.stringify(config)));
-    }, 5000);
-  },
-});
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 }
 
-function expandHome(p: string): string {
-  if (p === '~' || p.startsWith('~/')) return homedir() + p.slice(1);
-  return p;
-}
+// ── Sidecar JSON-RPC Client ──────────────────────────────────────────────
 
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
+let sidecarProc: ChildProcess | null = null;
+let nextId = 1;
+const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
 
-function loadConfig(): Config {
-  mkdirSync(CONFIG_DIR, { recursive: true });
-  if (!existsSync(CONFIG_PATH)) {
-    // No config yet — write an empty default.
-    const fallback: Config = { environments: [] };
-    const normalized = normalizeConfig(fallback);
-    writeConfig(normalized);
-    return normalized;
+/** Locate the sidecar binary. In dev, use the workspace build. In production, use the bundled binary. */
+function sidecarPath(): string {
+  // In packaged app, look for the binary next to the asar
+  const candidates = [
+    join(app.getAppPath(), '..', 'sidecar', 'tilt-sidecar'),
+    join(app.getAppPath(), '..', '..', 'packages', 'sidecar', 'dist', 'tilt-sidecar'),
+    // Dev: workspace build
+    join(process.cwd(), 'packages', 'sidecar', 'dist', 'tilt-sidecar'),
+  ];
+  for (const p of candidates) {
+    if (existsSync(p)) return p;
   }
-  try {
-    const parsed = JSON.parse(readFileSync(CONFIG_PATH, 'utf-8')) as Config;
-    return normalizeConfig(parsed);
-  } catch (e) {
-    // Parse error — back up the broken file instead of destroying it.
-    const backupPath = `${CONFIG_PATH}.bak`;
-    console.error(`Failed to parse config, backing up to ${backupPath}:`, e);
-    try {
-      renameSync(CONFIG_PATH, backupPath);
-    } catch { /* backup failed, proceed anyway */ }
-    const fallback: Config = { environments: [] };
-    const normalized = normalizeConfig(fallback);
-    writeConfig(normalized);
-    return normalized;
-  }
+  // Fallback — let PATH resolve it
+  return 'tilt-sidecar';
 }
 
-function normalizeConfig(raw: Config): Config {
-  const used = new Set<string>();
-  const environments = raw.environments.map((env, idx) => {
-    const id = env.id && env.id.length > 0 ? env.id : slugify(env.name || `env-${idx + 1}`) || `env-${idx + 1}`;
-    let unique = id;
-    let suffix = 2;
-    while (used.has(unique)) {
-      unique = `${id}-${suffix++}`;
-    }
-    used.add(unique);
-    return {
-      ...env,
-      id: unique,
-      external: env.external ?? false,
-      description: env.description ?? '',
-      selectedResources: env.selectedResources ?? [],
-      cachedResources: env.cachedResources ?? [],
-      serviceMapping: env.serviceMapping,
-    };
+function spawnSidecar(): void {
+  const bin = sidecarPath();
+  console.log(`[electron] Spawning sidecar: ${bin}`);
+
+  sidecarProc = spawn(bin, [], {
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: { ...process.env },
   });
-  return {
-    themeMode: raw.themeMode ?? 'system',
-    environments,
-  };
+
+  let buffer = '';
+  const stdout = sidecarProc.stdout;
+  if (!stdout) throw new Error('Sidecar stdout not available');
+  stdout.setEncoding('utf-8');
+  stdout.on('data', (chunk: string) => {
+    buffer += chunk;
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const msg = JSON.parse(line);
+        if ('id' in msg) {
+          // Response to a request
+          const waiter = pending.get(msg.id);
+          if (waiter) {
+            pending.delete(msg.id);
+            if (msg.error) {
+              waiter.reject(new Error(msg.error.message));
+            } else {
+              waiter.resolve(msg.result);
+            }
+          }
+        } else if ('method' in msg) {
+          // Push notification from sidecar
+          handleSidecarNotification(msg.method, msg.params);
+        }
+      } catch {
+        /* malformed line */
+      }
+    }
+  });
+
+  const stderr = sidecarProc.stderr;
+  if (stderr) {
+    stderr.setEncoding('utf-8');
+    stderr.on('data', (chunk: string) => {
+      console.error(`[sidecar stderr] ${chunk.trim()}`);
+    });
+  }
+
+  sidecarProc.on('exit', (code, signal) => {
+    console.log(`[electron] Sidecar exited (code=${code}, signal=${signal})`);
+    sidecarProc = null;
+    // Auto-restart unless we're quitting
+    if (!quitting) {
+      console.log('[electron] Restarting sidecar...');
+      setTimeout(spawnSidecar, 1000);
+    }
+  });
 }
 
-function writeConfig(next: Config): void {
-  mkdirSync(CONFIG_DIR, { recursive: true });
-  const tmpPath = `${CONFIG_PATH}.tmp`;
-  writeFileSync(tmpPath, JSON.stringify(next, null, 2));
-  renameSync(tmpPath, CONFIG_PATH);
+/** Send a JSON-RPC request to the sidecar and return a promise for the result. */
+function rpc<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    if (!sidecarProc || !sidecarProc.stdin) {
+      reject(new Error('Sidecar not running'));
+      return;
+    }
+    const id = nextId++;
+    pending.set(id, {
+      resolve: resolve as (v: unknown) => void,
+      reject,
+    });
+    const line = JSON.stringify({ jsonrpc: '2.0', id, method, params: params ?? {} });
+    sidecarProc.stdin.write(line + '\n');
+
+    // Timeout after 60s
+    setTimeout(() => {
+      if (pending.has(id)) {
+        pending.delete(id);
+        reject(new Error(`RPC timeout: ${method}`));
+      }
+    }, 60_000);
+  });
 }
+
+/** Handle push notifications from the sidecar. */
+function handleSidecarNotification(method: string, params: unknown): void {
+  switch (method) {
+    case 'statusUpdate': {
+      const update = params as StatusUpdate;
+      emitStatusUpdate(update);
+      break;
+    }
+    case 'logDelta': {
+      const delta = params as LogDelta;
+      emitLogDelta(delta);
+      break;
+    }
+    case 'configUpdated': {
+      config = params as Config;
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('launcher:config-updated', config);
+      }
+      break;
+    }
+    case 'ready':
+      console.log('[electron] Sidecar ready');
+      // Fetch initial config from sidecar
+      void rpc<Config>('getConfig').then((cfg) => {
+        config = cfg;
+        void rpc<StatusUpdate>('getStatus').then((update) => {
+          emitStatusUpdate(update);
+        });
+      });
+      break;
+  }
+}
+
+// ── Tray & Window ─────────────────────────────────────────────────────────
 
 function serviceStatusLabel(status: ResourceRow['health']): string {
   if (status === 'up') return 'Up';
@@ -243,7 +277,7 @@ function updateTrayMenu(update: StatusUpdate): void {
     checked: app.getLoginItemSettings().openAtLogin,
     click: (menuItem) => {
       app.setLoginItemSettings({ openAtLogin: menuItem.checked });
-      emitStatusUpdate();
+      void rpc<StatusUpdate>('getStatus').then((u) => emitStatusUpdate(u));
     },
   });
   items.push({
@@ -283,11 +317,10 @@ function createTray(): void {
   tray.on('click', () => ensureWindowVisible());
 }
 
-function emitStatusUpdate(update?: StatusUpdate): void {
-  const next = update ?? tiltManager.currentStatusUpdate();
-  updateTrayMenu(next);
+function emitStatusUpdate(update: StatusUpdate): void {
+  updateTrayMenu(update);
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('launcher:status-update', next);
+    mainWindow.webContents.send('launcher:status-update', update);
   }
 }
 
@@ -295,86 +328,6 @@ function emitLogDelta(delta: LogDelta): void {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('launcher:log-delta', delta);
   }
-}
-
-/**
- * macOS NSOpenPanel resolves POSIX symlinks before returning paths, so
- * `filePath` is often the real file rather than the symlink the user navigated
- * to.  This mirrors the runway `resolveToWorkspace` strategy: given the real
- * path, scan a set of likely roots for a symlink whose realpath matches the
- * file's containing directory, then remap the path through it.
- */
-function findSymlinkFor(realFilePath: string): string | null {
-  const realDir = dirname(realFilePath);
-  const filename = basename(realFilePath);
-
-  // Candidate roots to scan for directory symlinks that point to realDir.
-  const scanRoots = [
-    dirname(realDir), // siblings of the real directory
-    join(homedir(), 'Documents', 'GitHub'),
-    join(homedir(), 'Documents', 'Projects'),
-    join(homedir(), 'repos'),
-    join(homedir(), 'projects'),
-    join(homedir(), 'src'),
-    join(homedir(), 'dev'),
-    join(homedir(), 'code'),
-    join(homedir(), 'workspace'),
-  ];
-
-  for (const scanRoot of scanRoots) {
-    if (!existsSync(scanRoot)) continue;
-    try {
-      for (const entry of readdirSync(scanRoot)) {
-        const entryPath = join(scanRoot, entry);
-        try {
-          const entryStat = lstatSync(entryPath);
-          if (!entryStat.isSymbolicLink()) continue;
-          const entryReal = realpathSync(entryPath);
-          // Directory symlink whose target is realDir → remap file path through it
-          if (entryReal === realDir) return join(entryPath, filename);
-          // File symlink pointing directly to our file
-          if (entryReal === realFilePath) return entryPath;
-          // Symlink whose target is an ancestor of realDir → remap deeper path
-          const rel = relative(entryReal, realFilePath);
-          if (!rel.startsWith('..')) return join(entryPath, rel);
-        } catch {
-          continue;
-        }
-      }
-    } catch {
-      continue;
-    }
-  }
-  return null;
-}
-
-function classifyTiltfilePath(filePath: string): PickedTiltfile {
-  // Case 1: dialog handed us the symlink path directly (uncommon on macOS but possible)
-  try {
-    if (lstatSync(filePath).isSymbolicLink()) {
-      return { path: filePath, isSymlink: true, realPath: realpathSync(filePath) };
-    }
-  } catch {
-    /* ignore */
-  }
-
-  // Case 2: macOS resolved the symlink — try to reverse-map back to the symlink
-  const symlinkPath = findSymlinkFor(filePath);
-  if (symlinkPath) {
-    return { path: symlinkPath, isSymlink: true, realPath: filePath };
-  }
-
-  return { path: filePath, isSymlink: false };
-}
-
-function ensureUniquePorts(next: Config): string | null {
-  const seen = new Map<number, string>();
-  for (const env of next.environments) {
-    const owner = seen.get(env.tiltPort);
-    if (owner) return `Port ${env.tiltPort} is used by both ${owner} and ${env.name}.`;
-    seen.set(env.tiltPort, env.name);
-  }
-  return null;
 }
 
 function createWindow(): void {
@@ -412,32 +365,38 @@ function createWindow(): void {
   });
 }
 
+// ── IPC Handlers ──────────────────────────────────────────────────────────
+// All commands proxy through the sidecar via JSON-RPC.
+// Shell-specific commands (pickTiltfile, openExternal, loginItem) are handled
+// locally since they depend on Electron APIs.
+
 function registerIpcHandlers(): void {
-  ipcMain.handle('launcher:get-config', () => config);
-  ipcMain.handle('launcher:get-status', () => tiltManager.currentStatusUpdate());
-  ipcMain.handle('launcher:get-logs', (_event, envId: string) => tiltManager.getEnvLogs(envId));
-  ipcMain.handle('launcher:start-env', (_event, envId: string) => tiltManager.startEnv(envId));
-  ipcMain.handle('launcher:stop-env', (_event, envId: string) => tiltManager.stopEnv(envId));
-  ipcMain.handle('launcher:restart-env', (_event, envId: string) => tiltManager.restartEnv(envId));
+  // Proxied to sidecar
+  ipcMain.handle('launcher:get-config', () => rpc('getConfig'));
+  ipcMain.handle('launcher:get-status', () => rpc('getStatus'));
+  ipcMain.handle('launcher:get-logs', (_event, envId: string) => rpc('getLogs', { envId }));
+  ipcMain.handle('launcher:start-env', (_event, envId: string) => rpc('startEnv', { envId }));
+  ipcMain.handle('launcher:stop-env', (_event, envId: string) => rpc('stopEnv', { envId }));
+  ipcMain.handle('launcher:restart-env', (_event, envId: string) => rpc('restartEnv', { envId }));
   ipcMain.handle('launcher:trigger-resource', (_event, payload: { envId: string; resourceName: string }) =>
-    tiltManager.triggerResource(payload.envId, payload.resourceName),
+    rpc('triggerResource', payload),
   );
   ipcMain.handle('launcher:enable-resource', (_event, payload: { envId: string; resourceName: string }) =>
-    tiltManager.enableResource(payload.envId, payload.resourceName),
+    rpc('enableResource', payload),
   );
   ipcMain.handle('launcher:disable-resource', (_event, payload: { envId: string; resourceName: string }) =>
-    tiltManager.disableResource(payload.envId, payload.resourceName),
+    rpc('disableResource', payload),
   );
-  ipcMain.handle('launcher:save-config', (_event, nextConfig: Config) => {
-    const normalized = normalizeConfig(nextConfig);
-    const conflict = ensureUniquePorts(normalized);
-    if (conflict) return { ok: false, error: conflict };
-    config = normalized;
-    tiltManager.setConfig(config);
-    writeConfig(config);
-    emitStatusUpdate();
-    return { ok: true };
+  ipcMain.handle('launcher:save-config', async (_event, nextConfig: Config) => {
+    const result = await rpc<{ ok: boolean; error?: string }>('saveConfig', { config: nextConfig });
+    if (result.ok) {
+      // Re-fetch config to get the normalized version
+      config = await rpc<Config>('getConfig');
+    }
+    return result;
   });
+
+  // Shell-specific: file picker
   ipcMain.handle('launcher:pick-tiltfile', async (): Promise<PickedTiltfile | null> => {
     const result = await dialog.showOpenDialog({
       title: 'Select Tiltfile',
@@ -446,76 +405,40 @@ function registerIpcHandlers(): void {
     });
     if (result.canceled || result.filePaths.length === 0) return null;
     const filePath = result.filePaths[0] ?? '';
-    return classifyTiltfilePath(filePath);
+    // Classify via sidecar (handles symlink detection + reverse-mapping)
+    return rpc<PickedTiltfile>('classifyTiltfilePath', { filePath });
   });
-  ipcMain.handle('launcher:classify-tiltfile-path', (_event, filePath: string): PickedTiltfile => {
-    return classifyTiltfilePath(expandHome(filePath));
-  });
+
+  // Proxied to sidecar
+  ipcMain.handle('launcher:classify-tiltfile-path', (_event, filePath: string) =>
+    rpc('classifyTiltfilePath', { filePath }),
+  );
+
   ipcMain.handle(
     'launcher:discover-resources',
     (_event, payload: { tiltfilePath: string; tiltPort: number; timeoutMs?: number }) =>
-      tiltManager.discoverResources(payload),
+      rpc('discoverResources', payload),
   );
+
+  // Shell-specific: login item (uses Electron API)
   ipcMain.handle('launcher:get-login-item', () => {
     return { openAtLogin: app.getLoginItemSettings().openAtLogin };
   });
   ipcMain.handle('launcher:set-login-item', (_event, payload: { openAtLogin: boolean }) => {
     app.setLoginItemSettings({ openAtLogin: payload.openAtLogin });
-    emitStatusUpdate();
+    void rpc<StatusUpdate>('getStatus').then((u) => emitStatusUpdate(u));
     return { ok: true };
   });
+
+  // Shell-specific: open external URL
   ipcMain.handle('launcher:open-external', (_event, url: string) => shell.openExternal(url));
-  ipcMain.handle('launcher:get-home-dir', () => homedir());
-  ipcMain.handle('launcher:read-dir', (_event, dirPath: string): ReadDirResult => {
-    const resolvedDir = expandHome(dirPath);
-    try {
-      const rawNames = readdirSync(resolvedDir);
-      const entries: DirEntry[] = [];
-      for (const name of rawNames) {
-        if (name.startsWith('.')) continue;
-        const fullPath = join(resolvedDir, name);
-        try {
-          const lstat = lstatSync(fullPath);
-          const isSymlink = lstat.isSymbolicLink();
-          let isDirectory = lstat.isDirectory();
-          let isFile = lstat.isFile();
-          let symlinkTarget: string | undefined;
-          let realPath: string | undefined;
-          if (isSymlink) {
-            try {
-              symlinkTarget = readlinkSync(fullPath);
-            } catch {
-              /* ignore */
-            }
-            try {
-              realPath = realpathSync(fullPath);
-              const resolved = statSync(fullPath); // follows the symlink
-              isDirectory = resolved.isDirectory();
-              isFile = resolved.isFile();
-            } catch {
-              isFile = true; /* broken symlink */
-            }
-          }
-          entries.push({ name, isDirectory, isFile, isSymlink, symlinkTarget, realPath });
-        } catch {
-          continue;
-        }
-      }
-      entries.sort((a, b) => {
-        if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
-        return a.name.localeCompare(b.name);
-      });
-      return { ok: true, path: resolvedDir, entries };
-    } catch (e) {
-      return {
-        ok: false,
-        path: resolvedDir,
-        entries: [],
-        error: e instanceof Error ? e.message : 'Failed to read directory',
-      };
-    }
-  });
+
+  // Proxied to sidecar
+  ipcMain.handle('launcher:get-home-dir', () => rpc('getHomeDir'));
+  ipcMain.handle('launcher:read-dir', (_event, dirPath: string) => rpc('readDir', { dirPath }));
 }
+
+// ── App lifecycle ─────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.tiltlauncher.electron');
@@ -525,8 +448,7 @@ app.whenReady().then(() => {
   registerIpcHandlers();
   createTray();
   createWindow();
-  tiltManager.startPolling();
-  emitStatusUpdate();
+  spawnSidecar();
 
   app.on('activate', () => {
     ensureWindowVisible();
@@ -543,6 +465,9 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   quitting = true;
-  tiltManager.stopPolling();
-  // Match legacy launcher behavior: quitting the app does not stop Tilt.
+  // Close the sidecar process (which will stop polling but leave Tilt running)
+  if (sidecarProc) {
+    sidecarProc.stdin?.end();
+    sidecarProc.kill('SIGTERM');
+  }
 });

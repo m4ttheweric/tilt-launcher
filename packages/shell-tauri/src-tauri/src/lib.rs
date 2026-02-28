@@ -1,8 +1,10 @@
 mod commands;
 mod config;
+mod sidecar;
 mod types;
 
 use commands::AppState;
+use sidecar::SidecarManager;
 use std::sync::Mutex;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -12,6 +14,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(AppState {
             config: Mutex::new(cfg),
+            sidecar: SidecarManager::new(),
         })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -23,6 +26,11 @@ pub fn run() {
                         .build(),
                 )?;
             }
+
+            // Spawn the sidecar process
+            let state: tauri::State<AppState> = app.state();
+            state.sidecar.spawn(app.handle().clone());
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

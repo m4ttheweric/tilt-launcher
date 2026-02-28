@@ -25,9 +25,7 @@ export async function fetchStatus(): Promise<StatusUpdate> {
   return requireBridge().getStatus();
 }
 
-export async function fetchLogs(
-  envId: string,
-): Promise<{ envLogs: string[]; resourceLogs: Record<string, string[]> }> {
+export async function fetchLogs(envId: string): Promise<{ envLogs: string[]; resourceLogs: Record<string, string[]> }> {
   return requireBridge().getLogs(envId);
 }
 
@@ -102,7 +100,9 @@ export function onStatusUpdate(listener: (update: StatusUpdate) => void): () => 
   onBridgeReady((bridge) => {
     cleanup = bridge.onStatusUpdate(listener);
   });
-  return () => { cleanup?.(); };
+  return () => {
+    cleanup?.();
+  };
 }
 
 export function onLogDelta(listener: (delta: LogDelta) => void): () => void {
@@ -112,7 +112,9 @@ export function onLogDelta(listener: (delta: LogDelta) => void): () => void {
   onBridgeReady((bridge) => {
     cleanup = bridge.onLogDelta(listener);
   });
-  return () => { cleanup?.(); };
+  return () => {
+    cleanup?.();
+  };
 }
 
 export function onConfigUpdated(listener: (config: Config) => void): () => void {
@@ -122,5 +124,7 @@ export function onConfigUpdated(listener: (config: Config) => void): () => void 
   onBridgeReady((bridge) => {
     cleanup = bridge.onConfigUpdated(listener);
   });
-  return () => { cleanup?.(); };
+  return () => {
+    cleanup?.();
+  };
 }

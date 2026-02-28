@@ -1,13 +1,58 @@
 {
   "name": "@tilt-launcher/sidecar",
   "version": "1.2.0",
+  "description": "Standalone sidecar binary + typed client for the Tilt Launcher SDK — JSON-RPC 2.0 over stdio",
   "type": "module",
-  "main": "src/main.ts",
+  "main": "src/client.ts",
+  "types": "src/client.ts",
+  "bin": {
+    "tilt-sidecar": "dist/tilt-sidecar"
+  },
+  "exports": {
+    ".": {
+      "bun": "./src/client.ts",
+      "import": "./dist/client.js",
+      "types": "./dist/client.d.ts"
+    },
+    "./client": {
+      "bun": "./src/client.ts",
+      "import": "./dist/client.js",
+      "types": "./dist/client.d.ts"
+    }
+  },
+  "files": [
+    "src",
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
   "scripts": {
     "dev": "bun run src/main.ts",
-    "build": "bun build src/main.ts --compile --outfile dist/tilt-sidecar"
+    "build": "bun build src/main.ts --compile --outfile dist/tilt-sidecar && bun build src/client.ts --outdir dist --target node && tsc -p tsconfig.build.json",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "prepublishOnly": "bun run check && bun run build"
   },
   "dependencies": {
     "@tilt-launcher/sdk": "workspace:*"
+  },
+  "keywords": [
+    "tilt",
+    "tiltfile",
+    "sidecar",
+    "json-rpc",
+    "launcher"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/m4ttheweric/tilt-launcher",
+    "directory": "packages/sidecar"
+  },
+  "os": [
+    "darwin",
+    "linux"
+  ],
+  "engines": {
+    "node": ">=18"
   }
 }

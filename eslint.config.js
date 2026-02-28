@@ -1,13 +1,10 @@
 import js from '@eslint/js';
-import svelte from 'eslint-plugin-svelte';
 import ts from 'typescript-eslint';
 import globals from 'globals';
-import svelteConfig from './svelte.config.js';
 
 export default ts.config(
   js.configs.recommended,
   ...ts.configs.strict,
-  ...svelte.configs.recommended,
   {
     languageOptions: {
       globals: {
@@ -18,22 +15,17 @@ export default ts.config(
     },
   },
   {
-    files: ['**/*.svelte', '**/*.svelte.ts'],
-    languageOptions: {
-      parserOptions: {
-        svelteConfig,
-        parser: ts.parser,
-      },
-    },
-  },
-  {
-    // @html usage in OutputPane is safe — ansi_up generates styled <span> elements only
-    files: ['src/features/output/components/OutputPane.svelte'],
-    rules: {
-      'svelte/no-at-html-tags': 'off',
-    },
-  },
-  {
-    ignores: ['dist/', 'node_modules/', 'TiltLauncher.app/', '*.mjs'],
+    ignores: [
+      '**/dist/',
+      '**/node_modules/',
+      '**/out/',
+      'TiltLauncher.app/',
+      '*.mjs',
+      // UI has its own eslint.config.js (Svelte-specific)
+      'packages/ui/',
+      // Build artifacts
+      'packages/shell-tauri/src-tauri/target/',
+      'packages/shell-tauri/src-tauri/gen/',
+    ],
   },
 );

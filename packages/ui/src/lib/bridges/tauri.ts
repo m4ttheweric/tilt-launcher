@@ -7,7 +7,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-opener';
-import { save } from '@tauri-apps/plugin-dialog';
 import type { LauncherBridge } from '@tilt-launcher/sdk';
 import type {
   Config,
@@ -37,12 +36,9 @@ export const tauriBridge: LauncherBridge = {
   restartEnv: (envId: string) => invoke<Result>('restart_env', { envId }),
 
   // ── Resource control (stubs until sidecar) ──────────────────────────
-  triggerResource: (envId, resourceName) =>
-    invoke<Result>('trigger_resource', { envId, resourceName }),
-  enableResource: (envId, resourceName) =>
-    invoke<Result>('enable_resource', { envId, resourceName }),
-  disableResource: (envId, resourceName) =>
-    invoke<Result>('disable_resource', { envId, resourceName }),
+  triggerResource: (envId, resourceName) => invoke<Result>('trigger_resource', { envId, resourceName }),
+  enableResource: (envId, resourceName) => invoke<Result>('enable_resource', { envId, resourceName }),
+  disableResource: (envId, resourceName) => invoke<Result>('disable_resource', { envId, resourceName }),
 
   // ── File operations ─────────────────────────────────────────────────
   pickTiltfile: async () => {
@@ -57,8 +53,7 @@ export const tauriBridge: LauncherBridge = {
     return invoke<PickedTiltfile>('classify_tiltfile_path', { filePath });
   },
 
-  classifyTiltfilePath: (filePath: string) =>
-    invoke<PickedTiltfile>('classify_tiltfile_path', { filePath }),
+  classifyTiltfilePath: (filePath: string) => invoke<PickedTiltfile>('classify_tiltfile_path', { filePath }),
 
   openExternal: async (url: string) => {
     await open(url);
@@ -76,8 +71,7 @@ export const tauriBridge: LauncherBridge = {
 
   // ── Login items ─────────────────────────────────────────────────────
   getLoginItemSettings: () => invoke<LoginItemSettings>('get_login_item'),
-  setLoginItemSettings: (openAtLogin: boolean) =>
-    invoke<Result>('set_login_item', { openAtLogin }),
+  setLoginItemSettings: (openAtLogin: boolean) => invoke<Result>('set_login_item', { openAtLogin }),
 
   // ── Events (will be emitted by sidecar in Phase 2) ──────────────────
   onStatusUpdate: (listener) => {

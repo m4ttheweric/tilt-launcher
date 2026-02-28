@@ -34,11 +34,7 @@ export interface LauncherBridge {
   openExternal(url: string): Promise<void>;
   getHomeDir(): Promise<string>;
   readDir(dirPath: string): Promise<ReadDirResult>;
-  discoverResources(input: {
-    tiltfilePath: string;
-    tiltPort: number;
-    timeoutMs?: number;
-  }): Promise<DiscoverResult>;
+  discoverResources(input: { tiltfilePath: string; tiltPort: number; timeoutMs?: number }): Promise<DiscoverResult>;
   getLoginItemSettings(): Promise<LoginItemSettings>;
   setLoginItemSettings(openAtLogin: boolean): Promise<Result>;
 

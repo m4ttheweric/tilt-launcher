@@ -79,9 +79,13 @@ async function forceKillPort(port: number): Promise<void> {
     for (const pid of pids) {
       try {
         process.kill(Number(pid), 'SIGKILL');
-      } catch { /* already gone */ }
+      } catch {
+        /* already gone */
+      }
     }
-  } catch { /* lsof not available */ }
+  } catch {
+    /* lsof not available */
+  }
 }
 
 // ── Sidecar Process Manager ─────────────────────────────────────────────────
@@ -154,7 +158,9 @@ function spawnSidecar(configPath?: string): Promise<SidecarProcess> {
               resolve(sidecar);
             }
           }
-        } catch { /* malformed line */ }
+        } catch {
+          /* malformed line */
+        }
       }
     });
 
@@ -330,8 +336,24 @@ describe('Sidecar — config management', () => {
   it('saveConfig rejects duplicate tiltPort across environments', async () => {
     const badConfig: Config = {
       environments: [
-        { id: 'env-a', name: 'Env A', repoDir: '/tmp/a', tiltfile: 'Tiltfile', tiltPort: 19000, selectedResources: [], cachedResources: [] },
-        { id: 'env-b', name: 'Env B', repoDir: '/tmp/b', tiltfile: 'Tiltfile', tiltPort: 19000, selectedResources: [], cachedResources: [] },
+        {
+          id: 'env-a',
+          name: 'Env A',
+          repoDir: '/tmp/a',
+          tiltfile: 'Tiltfile',
+          tiltPort: 19000,
+          selectedResources: [],
+          cachedResources: [],
+        },
+        {
+          id: 'env-b',
+          name: 'Env B',
+          repoDir: '/tmp/b',
+          tiltfile: 'Tiltfile',
+          tiltPort: 19000,
+          selectedResources: [],
+          cachedResources: [],
+        },
       ],
     };
     const result = (await sidecar.send('saveConfig', { config: badConfig })) as { ok: boolean; error?: string };
@@ -489,7 +511,9 @@ describe('Sidecar — basic fixture lifecycle', () => {
     // Stop env via sidecar
     try {
       await sidecar.send('stopEnv', { envId: ENV_ID });
-    } catch { /* sidecar may already be down */ }
+    } catch {
+      /* sidecar may already be down */
+    }
     await sleep(2000);
     sidecar.close();
     await forceKillPort(TILT_PORT);

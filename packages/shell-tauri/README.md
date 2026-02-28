@@ -26,7 +26,9 @@ const bridge: LauncherBridge = {
   startEnv: (envId) => invoke('start_env', { envId }),
   onStatusUpdate: (listener) => {
     const unlisten = listen('status-update', (e) => listener(e.payload));
-    return () => { unlisten.then(fn => fn()); };
+    return () => {
+      unlisten.then((fn) => fn());
+    };
   },
   // ... etc
 };

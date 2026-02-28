@@ -1,0 +1,65 @@
+name: Publish Packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version bump type'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      dry_run:
+        description: 'Dry run (skip actual publish)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.9'
+
+      - name: Setup Node (for npm publish)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Type-check packages
+        run: bun run check:packages
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Format check
+        run: bun run format:check
+
+      - name: Build packages
+        run: bun run build:packages
+
+      - name: Run sidecar E2E tests
+        run: bun test tests/sidecar.e2e.test.ts --timeout 120000
+
+      - name: Publish (or dry run)
+        if: ${{ !inputs.dry_run }}
+        run: bun publish-packages.ts ${{ inputs.bump }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Push tags
+        if: ${{ !inputs.dry_run }}
+        run: git push && git push --tags

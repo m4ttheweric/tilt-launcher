@@ -1,6 +1,15 @@
-dist/
+# Build outputs
+**/dist/
 dist-app/
 out/
-node_modules/
 TiltLauncher.app/
+
+# Tauri generated / compiled
+packages/shell-tauri/src-tauri/gen/
+packages/shell-tauri/src-tauri/target/
+
+# Lock files
 bun.lock
+
+# Dependencies
+node_modules/

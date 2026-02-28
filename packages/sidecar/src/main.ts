@@ -96,7 +96,9 @@ function loadConfig(): Config {
     console.error(`Failed to parse config, backing up to ${backupPath}:`, e);
     try {
       renameSync(CONFIG_PATH, backupPath);
-    } catch { /* backup failed */ }
+    } catch {
+      /* backup failed */
+    }
     const fallback: Config = { environments: [] };
     const normalized = normalizeConfig(fallback);
     writeConfig(normalized);
@@ -209,7 +211,9 @@ function classifyTiltfilePath(filePath: string): PickedTiltfile {
     if (lstatSync(resolved).isSymbolicLink()) {
       return { path: resolved, isSymlink: true, realPath: realpathSync(resolved) };
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 
   // Case 2: macOS resolved the symlink — try to reverse-map back to the symlink
   const symlinkPath = findSymlinkFor(resolved);
@@ -247,7 +251,9 @@ function readDir(dirPath: string): { ok: boolean; path: string; entries: DirEntr
         if (isSymlink) {
           try {
             symlinkTarget = readlinkSync(fullPath);
-          } catch { /* ignore */ }
+          } catch {
+            /* ignore */
+          }
           try {
             realPath = realpathSync(fullPath);
             const resolvedStat = statSync(fullPath); // follows the symlink

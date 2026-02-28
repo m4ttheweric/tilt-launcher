@@ -72,12 +72,7 @@ export function successResponse(id: number | string, result: unknown): string {
   return JSON.stringify(resp);
 }
 
-export function errorResponse(
-  id: number | string,
-  code: number,
-  message: string,
-  data?: unknown,
-): string {
+export function errorResponse(id: number | string, code: number, message: string, data?: unknown): string {
   const resp: JsonRpcResponse = { jsonrpc: '2.0', id, error: { code, message, data } };
   return JSON.stringify(resp);
 }
