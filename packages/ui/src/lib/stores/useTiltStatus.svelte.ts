@@ -86,7 +86,7 @@ export function useTiltStatus(): TiltStatusStore {
       // Fetch initial status
       if (!initialized) {
         initialized = true;
-        void fetchStatus().then((update) => applyStatusUpdate(update));
+        void fetchStatus().then((update) => applyStatusUpdate(update)).catch(() => {});
       }
 
       // Subscribe to push updates

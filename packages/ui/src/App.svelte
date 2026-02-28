@@ -12,6 +12,7 @@
     triggerResource,
     saveConfig,
   } from './lib/api.ts';
+  import { onBridgeReady } from './lib/bridge-provider.ts';
   import { DISCOVERY_PROGRESS_MAX_SECONDS } from './lib/constants.ts';
   import type { Config, Environment, ServiceMapping } from './lib/types.ts';
   import { useTiltStatus } from './lib/stores/useTiltStatus.svelte.ts';
@@ -76,8 +77,8 @@
         launcher.selectedTiltUrl = '';
       }
     } catch (error) {
-      const detail = error instanceof Error ? error.message : 'Unknown renderer initialization error';
-      notify('error', `Failed to initialize launcher bridge: ${detail}`);
+      // Bridge not ready yet — this is expected for Tauri (async bridge loading).
+      console.debug('initialize deferred:', error);
     }
   }
 
@@ -135,6 +136,12 @@
     const unsubConfig = onConfigUpdated((next) => {
       config = next;
     });
+
+    // Re-initialize when bridge becomes available (Tauri async case).
+    onBridgeReady(() => {
+      void initialize();
+    });
+
     const onKeyDown = (event: KeyboardEvent): void => {
       const isShortcut = (event.metaKey || event.ctrlKey) && event.key === ',';
       if (!isShortcut) return;

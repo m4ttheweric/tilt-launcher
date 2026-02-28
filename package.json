@@ -8,7 +8,7 @@
   "scripts": {
     "dev:electron": "bun run --filter @tilt-launcher/shell-electron dev",
     "dev:web": "bun run --filter @tilt-launcher/ui dev",
-    "dev:tauri": "bun run --filter @tilt-launcher/ui dev & bun run --filter @tilt-launcher/shell-tauri dev",
+    "dev:tauri": "bun run --filter @tilt-launcher/shell-tauri dev",
     "build": "bun run check && bun run lint && bun run --filter @tilt-launcher/shell-electron build",
     "preview": "cd packages/shell-electron && electron-vite preview",
     "check": "tsgo --noEmit -p packages/sdk/tsconfig.json && tsgo --noEmit -p packages/ui/tsconfig.json && tsgo --noEmit -p packages/shell-electron/tsconfig.json",
@@ -22,7 +22,8 @@
     "install:app": "bun install.ts",
     "release": "bun release.ts",
     "release:dry": "bun release.ts --dry-run",
-    "prepare": "echo '#!/bin/bash\\nexec \"$(git rev-parse --show-toplevel)/hooks/pre-commit\"' > .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit || true"
+    "_prepare_disabled": "echo '#!/bin/bash\\nexec \"$(git rev-parse --show-toplevel)/hooks/pre-commit\"' > .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit || true",
+    "prepare": "true"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

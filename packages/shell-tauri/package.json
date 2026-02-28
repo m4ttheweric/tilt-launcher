@@ -3,7 +3,10 @@
   "version": "1.2.0",
   "type": "module",
   "dependencies": {
-    "@tilt-launcher/sdk": "workspace:*"
+    "@tilt-launcher/sdk": "workspace:*",
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-dialog": "^2",
+    "@tauri-apps/plugin-opener": "^2"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"

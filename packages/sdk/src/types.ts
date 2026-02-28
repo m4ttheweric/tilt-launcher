@@ -68,8 +68,6 @@ export interface PickedTiltfile {
 }
 
 export interface Config {
-  port: number;
-  dashboardUrl?: string | undefined;
   themeMode?: 'dark' | 'light' | 'system' | undefined;
   environments: Environment[];
 }

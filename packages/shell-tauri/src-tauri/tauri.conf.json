@@ -1,18 +1,25 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Tilt Launcher",
-  "version": "0.1.0",
-  "identifier": "com.tauri.dev",
+  "version": "1.2.0",
+  "identifier": "com.tiltlauncher.tauri",
   "build": {
-    "frontendDist": "../ui/dist",
-    "devUrl": "http://localhost:5200"
+    "frontendDist": "../../ui/dist",
+    "devUrl": "http://localhost:5210",
+    "beforeDevCommand": "cd ../ui && npx vite --port 5210 --strict-port",
+    "beforeBuildCommand": "cd ../ui && npx vite build"
   },
   "app": {
     "windows": [
       {
         "title": "Tilt Launcher",
-        "width": 800,
-        "height": 600,
+        "width": 1560,
+        "height": 980,
+        "minWidth": 1200,
+        "minHeight": 760,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
         "resizable": true,
         "fullscreen": false
       }

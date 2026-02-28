@@ -15,18 +15,18 @@
   let { message, messageKind, themeMode, onCycleThemeMode, onOpenSettings }: Props = $props();
 </script>
 
-<header class="drag-region flex h-10 shrink-0 items-center justify-between border-b border-border pr-2 pl-20">
-  <div class="no-drag flex items-center gap-2">
+<header data-tauri-drag-region class="drag-region flex h-10 shrink-0 items-center justify-between border-b border-border pr-2 pl-20">
+  <div class="pointer-events-none flex items-center gap-2">
     <h1 class="text-sm leading-none font-semibold">Tilt Launcher</h1>
     <span class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">v{__APP_VERSION__}</span>
   </div>
-  <div class="no-drag flex items-center gap-2">
+  <div class="pointer-events-none flex items-center gap-2">
     {#if message}
       <span class={`text-xs ${messageKind === 'error' ? 'text-rose-400' : 'text-emerald-400'}`}>{message}</span>
     {/if}
     <button
       type="button"
-      class="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      class="no-drag pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       aria-label="Toggle theme mode"
       title={`Theme: ${themeMode}`}
       onclick={() => void onCycleThemeMode()}
@@ -41,7 +41,7 @@
     </button>
     <button
       type="button"
-      class="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      class="no-drag pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       aria-label="Open settings"
       onclick={onOpenSettings}
     >

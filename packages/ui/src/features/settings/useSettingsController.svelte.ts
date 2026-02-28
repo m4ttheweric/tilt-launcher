@@ -107,6 +107,14 @@ export function useSettingsController({
         tiltPort: newTiltPort,
         timeoutMs: DISCOVERY_TIMEOUT_MS,
       });
+    } catch (error) {
+      console.error('Discovery failed:', error);
+      discoverResult = {
+        ok: false,
+        resources: [],
+        logs: [],
+        error: error instanceof Error ? error.message : String(error),
+      };
     } finally {
       discovering = false;
       if (discoveryTimer) {

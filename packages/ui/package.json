@@ -6,6 +6,9 @@
     "@tilt-launcher/sdk": "workspace:*",
     "@sveltejs/vite-plugin-svelte": "^6.2.4",
     "@tailwindcss/vite": "^4.2.1",
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-dialog": "^2",
+    "@tauri-apps/plugin-opener": "^2",
     "ansi_up": "^6.0.6",
     "svelte": "^5.53.5",
     "tailwindcss": "^4.2.1",
@@ -31,6 +34,7 @@
   },
   "scripts": {
     "dev": "vite",
+    "dev:tauri": "vite --port 5210 --strict-port",
     "build": "vite build"
   }
 }

@@ -1,4 +1,4 @@
-import { getBridge } from './bridge-provider.ts';
+import { getBridge, onBridgeReady } from './bridge-provider.ts';
 import type {
   Config,
   DiscoverResult,
@@ -11,66 +11,72 @@ import type {
 
 type Result = { ok: boolean; error?: string };
 
+function requireBridge() {
+  const b = getBridge();
+  if (!b) throw new Error('Bridge not ready');
+  return b;
+}
+
 export async function fetchConfig(): Promise<Config> {
-  return await getBridge().getConfig();
+  return requireBridge().getConfig();
 }
 
 export async function fetchStatus(): Promise<StatusUpdate> {
-  return await getBridge().getStatus();
+  return requireBridge().getStatus();
 }
 
 export async function fetchLogs(
   envId: string,
 ): Promise<{ envLogs: string[]; resourceLogs: Record<string, string[]> }> {
-  return await getBridge().getLogs(envId);
+  return requireBridge().getLogs(envId);
 }
 
 export async function startEnv(envId: string): Promise<Result> {
-  return await getBridge().startEnv(envId);
+  return requireBridge().startEnv(envId);
 }
 
 export async function stopEnv(envId: string): Promise<Result> {
-  return await getBridge().stopEnv(envId);
+  return requireBridge().stopEnv(envId);
 }
 
 export async function restartEnv(envId: string): Promise<Result> {
-  return await getBridge().restartEnv(envId);
+  return requireBridge().restartEnv(envId);
 }
 
 export async function triggerResource(envId: string, resourceName: string): Promise<Result> {
-  return await getBridge().triggerResource(envId, resourceName);
+  return requireBridge().triggerResource(envId, resourceName);
 }
 
 export async function enableResource(envId: string, resourceName: string): Promise<Result> {
-  return await getBridge().enableResource(envId, resourceName);
+  return requireBridge().enableResource(envId, resourceName);
 }
 
 export async function disableResource(envId: string, resourceName: string): Promise<Result> {
-  return await getBridge().disableResource(envId, resourceName);
+  return requireBridge().disableResource(envId, resourceName);
 }
 
 export async function saveConfig(config: Config): Promise<Result> {
-  return await getBridge().saveConfig(config);
+  return requireBridge().saveConfig(config);
 }
 
 export async function pickTiltfile(): Promise<PickedTiltfile | null> {
-  return await getBridge().pickTiltfile();
+  return requireBridge().pickTiltfile();
 }
 
 export async function classifyTiltfilePath(filePath: string): Promise<PickedTiltfile> {
-  return await getBridge().classifyTiltfilePath(filePath);
+  return requireBridge().classifyTiltfilePath(filePath);
 }
 
 export async function openExternal(url: string): Promise<void> {
-  await getBridge().openExternal(url);
+  await requireBridge().openExternal(url);
 }
 
 export async function getHomeDir(): Promise<string> {
-  return await getBridge().getHomeDir();
+  return requireBridge().getHomeDir();
 }
 
 export async function readDir(dirPath: string): Promise<ReadDirResult> {
-  return await getBridge().readDir(dirPath);
+  return requireBridge().readDir(dirPath);
 }
 
 export async function discoverResources(input: {
@@ -78,25 +84,43 @@ export async function discoverResources(input: {
   tiltPort: number;
   timeoutMs?: number;
 }): Promise<DiscoverResult> {
-  return await getBridge().discoverResources(input);
+  return requireBridge().discoverResources(input);
 }
 
 export async function fetchLoginItemSettings(): Promise<LoginItemSettings> {
-  return await getBridge().getLoginItemSettings();
+  return requireBridge().getLoginItemSettings();
 }
 
 export async function setLoginItemSettings(openAtLogin: boolean): Promise<Result> {
-  return await getBridge().setLoginItemSettings(openAtLogin);
+  return requireBridge().setLoginItemSettings(openAtLogin);
 }
 
 export function onStatusUpdate(listener: (update: StatusUpdate) => void): () => void {
-  return getBridge().onStatusUpdate(listener);
+  const b = getBridge();
+  if (b) return b.onStatusUpdate(listener);
+  let cleanup: (() => void) | null = null;
+  onBridgeReady((bridge) => {
+    cleanup = bridge.onStatusUpdate(listener);
+  });
+  return () => { cleanup?.(); };
 }
 
 export function onLogDelta(listener: (delta: LogDelta) => void): () => void {
-  return getBridge().onLogDelta(listener);
+  const b = getBridge();
+  if (b) return b.onLogDelta(listener);
+  let cleanup: (() => void) | null = null;
+  onBridgeReady((bridge) => {
+    cleanup = bridge.onLogDelta(listener);
+  });
+  return () => { cleanup?.(); };
 }
 
 export function onConfigUpdated(listener: (config: Config) => void): () => void {
-  return getBridge().onConfigUpdated(listener);
+  const b = getBridge();
+  if (b) return b.onConfigUpdated(listener);
+  let cleanup: (() => void) | null = null;
+  onBridgeReady((bridge) => {
+    cleanup = bridge.onConfigUpdated(listener);
+  });
+  return () => { cleanup?.(); };
 }

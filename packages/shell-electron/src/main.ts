@@ -29,7 +29,6 @@ type EnvState = 'running' | 'starting' | 'stopped';
 
 const CONFIG_DIR = join(homedir(), '.config', 'tilt-launcher');
 const CONFIG_PATH = process.env.TILT_LAUNCHER_CONFIG || join(CONFIG_DIR, 'config.json');
-const DEFAULT_PORT = 10400;
 
 let config: Config = loadConfig();
 let mainWindow: BrowserWindow | null = null;
@@ -69,14 +68,24 @@ function slugify(value: string): string {
 
 function loadConfig(): Config {
   mkdirSync(CONFIG_DIR, { recursive: true });
+  if (!existsSync(CONFIG_PATH)) {
+    // No config yet — write an empty default.
+    const fallback: Config = { environments: [] };
+    const normalized = normalizeConfig(fallback);
+    writeConfig(normalized);
+    return normalized;
+  }
   try {
     const parsed = JSON.parse(readFileSync(CONFIG_PATH, 'utf-8')) as Config;
     return normalizeConfig(parsed);
-  } catch {
-    const examplePath = join(app.getAppPath(), 'config.example.json');
-    const fallback = existsSync(examplePath)
-      ? (JSON.parse(readFileSync(examplePath, 'utf-8')) as Config)
-      : ({ port: DEFAULT_PORT, environments: [] } as Config);
+  } catch (e) {
+    // Parse error — back up the broken file instead of destroying it.
+    const backupPath = `${CONFIG_PATH}.bak`;
+    console.error(`Failed to parse config, backing up to ${backupPath}:`, e);
+    try {
+      renameSync(CONFIG_PATH, backupPath);
+    } catch { /* backup failed, proceed anyway */ }
+    const fallback: Config = { environments: [] };
     const normalized = normalizeConfig(fallback);
     writeConfig(normalized);
     return normalized;
@@ -104,8 +113,6 @@ function normalizeConfig(raw: Config): Config {
     };
   });
   return {
-    port: raw.port ?? DEFAULT_PORT,
-    dashboardUrl: raw.dashboardUrl,
     themeMode: raw.themeMode ?? 'system',
     environments,
   };
