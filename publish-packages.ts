@@ -81,6 +81,16 @@ function header(msg: string): void {
 // ── Main ──────────────────────────────────────────────────────────────
 
 async function main() {
+  // Guard: ensure clean working tree before publishing
+  if (!dryRun) {
+    const status = await $`git status --porcelain`.text();
+    if (status.trim()) {
+      console.error('❌ Working tree is dirty. Commit or stash changes before publishing.\n');
+      console.error(status.trim());
+      process.exit(1);
+    }
+  }
+
   const currentVersion = readVersion(ROOT_PKG);
   const nextVersion = bumpArg ? bumpVersion(currentVersion, bumpArg) : currentVersion;
 
@@ -158,8 +168,13 @@ async function main() {
   await $`git tag v${nextVersion}`.quiet();
   console.log(`  ✓ Tagged v${nextVersion}`);
 
+  // Push commit and tag
+  console.log('  Pushing to remote...');
+  await $`git push`.quiet();
+  await $`git push --tags`.quiet();
+  console.log('  ✓ Pushed to remote');
+
   console.log(`\n✅ Published @tilt-launcher/sdk@${nextVersion} and @tilt-launcher/sidecar@${nextVersion}!\n`);
-  console.log(`  Don't forget: git push && git push --tags\n`);
 }
 
 main().catch((e) => {
