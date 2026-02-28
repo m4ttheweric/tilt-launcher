@@ -7,7 +7,7 @@ import type {
   PickedTiltfile,
   ReadDirResult,
   StatusUpdate,
-} from '../lib/types.ts';
+} from '@tilt-launcher/sdk';
 
 type StartStopResult = { ok: boolean; error?: string };
 
@@ -69,4 +69,8 @@ const api = {
 
 contextBridge.exposeInMainWorld('tiltLauncher', api);
 
+// Register the bridge for the UI layer.
+// The UI imports setBridge from @tilt-launcher/ui and this preload
+// exposes the api on window.tiltLauncher which the Electron-specific
+// bridge adapter will consume.
 export type TiltLauncherApi = typeof api;

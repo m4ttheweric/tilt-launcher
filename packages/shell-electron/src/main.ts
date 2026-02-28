@@ -22,8 +22,8 @@ import type {
   ReadDirResult,
   ResourceRow,
   StatusUpdate,
-} from '../lib/types.ts';
-import { TiltManagerSDK } from './tiltManagerSDK.ts';
+} from '@tilt-launcher/sdk';
+import { TiltManagerSDK } from '@tilt-launcher/sdk';
 
 type EnvState = 'running' | 'starting' | 'stopped';
 
@@ -380,7 +380,7 @@ function createWindow(): void {
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 12, y: 11 },
     webPreferences: {
-      preload: join(__dirname, '../preload/index.mjs'),
+      preload: join(__dirname, '../preload/preload.mjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,

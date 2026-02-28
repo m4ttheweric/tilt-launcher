@@ -2,32 +2,41 @@ import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import tailwindcss from '@tailwindcss/vite';
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const { version } = JSON.parse(readFileSync('./package.json', 'utf-8'));
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const { version } = JSON.parse(readFileSync(resolve(__dirname, '../../package.json'), 'utf-8'));
+
+const uiDir = resolve(__dirname, '../ui');
 
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
     build: {
-      outDir: 'out/main',
+      outDir: resolve(__dirname, 'out/main'),
+      lib: {
+        entry: resolve(__dirname, 'src/main.ts'),
+      },
     },
   },
   preload: {
     plugins: [externalizeDepsPlugin()],
     build: {
-      outDir: 'out/preload',
+      outDir: resolve(__dirname, 'out/preload'),
+      lib: {
+        entry: resolve(__dirname, 'src/preload.ts'),
+      },
     },
   },
   renderer: {
-    root: '.',
+    root: uiDir,
     server: {
-      // Use an ephemeral dev port to avoid collisions with Tilt/service ports.
       port: 5200,
     },
     resolve: {
       alias: {
-        $lib: resolve('./src/lib'),
+        $lib: resolve(uiDir, 'src/lib'),
       },
     },
     plugins: [svelte(), tailwindcss()],
@@ -35,10 +44,10 @@ export default defineConfig({
       __APP_VERSION__: JSON.stringify(version),
     },
     build: {
-      outDir: 'out/renderer',
+      outDir: resolve(__dirname, 'out/renderer'),
       emptyOutDir: true,
       rollupOptions: {
-        input: resolve('./index.html'),
+        input: resolve(uiDir, 'index.html'),
       },
     },
   },

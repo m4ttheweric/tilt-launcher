@@ -1,0 +1,21 @@
+{
+  "name": "@tilt-launcher/shell-electron",
+  "version": "1.2.0",
+  "type": "module",
+  "main": "out/main/main.js",
+  "dependencies": {
+    "@tilt-launcher/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@electron-toolkit/utils": "^4.0.0",
+    "@electron/packager": "^19.0.5",
+    "electron": "^40.6.1",
+    "electron-vite": "^5.0.0"
+  },
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "package:app": "bun ../../package-app.ts"
+  }
+}

@@ -1,6 +1,6 @@
 {
-  // TypeScript 7 native preview (tsgo) recommended config
-  // Adapted for Svelte 5 + Vite 7 + Tailwind v4
+  // TypeScript 7 native preview (tsgo) base config
+  // Each package extends this with its own paths and includes.
 
   "compilerOptions": {
     // Environment — Vite handles bundling, we only type-check
@@ -21,12 +21,6 @@
     "isolatedModules": true,
     "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
-    "skipLibCheck": true,
-    "paths": {
-      "*": ["./*"],
-      "$lib": ["./src/lib"],
-      "$lib/*": ["./src/lib/*"]
-    }
-  },
-  "include": ["src/**/*.ts", "src/**/*.svelte"]
+    "skipLibCheck": true
+  }
 }

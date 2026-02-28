@@ -1,3 +1,4 @@
+import { getBridge } from './bridge-provider.ts';
 import type {
   Config,
   DiscoverResult,
@@ -9,69 +10,67 @@ import type {
 } from './types.ts';
 
 type Result = { ok: boolean; error?: string };
-function bridge(): Window['tiltLauncher'] {
-  if (!window.tiltLauncher) throw new Error('IPC bridge unavailable (window.tiltLauncher missing)');
-  return window.tiltLauncher;
-}
 
 export async function fetchConfig(): Promise<Config> {
-  return await bridge().getConfig();
+  return await getBridge().getConfig();
 }
 
 export async function fetchStatus(): Promise<StatusUpdate> {
-  return await bridge().getStatus();
+  return await getBridge().getStatus();
 }
 
-export async function fetchLogs(envId: string): Promise<{ envLogs: string[]; resourceLogs: Record<string, string[]> }> {
-  return await bridge().getLogs(envId);
+export async function fetchLogs(
+  envId: string,
+): Promise<{ envLogs: string[]; resourceLogs: Record<string, string[]> }> {
+  return await getBridge().getLogs(envId);
 }
 
 export async function startEnv(envId: string): Promise<Result> {
-  return await bridge().startEnv(envId);
+  return await getBridge().startEnv(envId);
 }
 
 export async function stopEnv(envId: string): Promise<Result> {
-  return await bridge().stopEnv(envId);
+  return await getBridge().stopEnv(envId);
 }
 
 export async function restartEnv(envId: string): Promise<Result> {
-  return await bridge().restartEnv(envId);
+  return await getBridge().restartEnv(envId);
 }
 
 export async function triggerResource(envId: string, resourceName: string): Promise<Result> {
-  return await bridge().triggerResource(envId, resourceName);
+  return await getBridge().triggerResource(envId, resourceName);
 }
 
 export async function enableResource(envId: string, resourceName: string): Promise<Result> {
-  return await bridge().enableResource(envId, resourceName);
+  return await getBridge().enableResource(envId, resourceName);
 }
 
 export async function disableResource(envId: string, resourceName: string): Promise<Result> {
-  return await bridge().disableResource(envId, resourceName);
+  return await getBridge().disableResource(envId, resourceName);
 }
 
 export async function saveConfig(config: Config): Promise<Result> {
-  return await bridge().saveConfig(config);
+  return await getBridge().saveConfig(config);
 }
 
 export async function pickTiltfile(): Promise<PickedTiltfile | null> {
-  return await bridge().pickTiltfile();
+  return await getBridge().pickTiltfile();
 }
 
 export async function classifyTiltfilePath(filePath: string): Promise<PickedTiltfile> {
-  return await bridge().classifyTiltfilePath(filePath);
+  return await getBridge().classifyTiltfilePath(filePath);
 }
 
 export async function openExternal(url: string): Promise<void> {
-  await bridge().openExternal(url);
+  await getBridge().openExternal(url);
 }
 
 export async function getHomeDir(): Promise<string> {
-  return await bridge().getHomeDir();
+  return await getBridge().getHomeDir();
 }
 
 export async function readDir(dirPath: string): Promise<ReadDirResult> {
-  return await bridge().readDir(dirPath);
+  return await getBridge().readDir(dirPath);
 }
 
 export async function discoverResources(input: {
@@ -79,28 +78,25 @@ export async function discoverResources(input: {
   tiltPort: number;
   timeoutMs?: number;
 }): Promise<DiscoverResult> {
-  return await bridge().discoverResources(input);
+  return await getBridge().discoverResources(input);
 }
 
 export async function fetchLoginItemSettings(): Promise<LoginItemSettings> {
-  return await bridge().getLoginItemSettings();
+  return await getBridge().getLoginItemSettings();
 }
 
 export async function setLoginItemSettings(openAtLogin: boolean): Promise<Result> {
-  return await bridge().setLoginItemSettings(openAtLogin);
+  return await getBridge().setLoginItemSettings(openAtLogin);
 }
 
 export function onStatusUpdate(listener: (update: StatusUpdate) => void): () => void {
-  if (!window.tiltLauncher) return () => {};
-  return window.tiltLauncher.onStatusUpdate(listener);
+  return getBridge().onStatusUpdate(listener);
 }
 
 export function onLogDelta(listener: (delta: LogDelta) => void): () => void {
-  if (!window.tiltLauncher) return () => {};
-  return window.tiltLauncher.onLogDelta(listener);
+  return getBridge().onLogDelta(listener);
 }
 
 export function onConfigUpdated(listener: (config: Config) => void): () => void {
-  if (!window.tiltLauncher) return () => {};
-  return window.tiltLauncher.onConfigUpdated(listener);
+  return getBridge().onConfigUpdated(listener);
 }

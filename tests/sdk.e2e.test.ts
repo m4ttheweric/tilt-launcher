@@ -20,8 +20,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import net from 'node:net';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { TiltManagerSDK } from '../src/main/tiltManagerSDK.ts';
-import type { Config } from '../src/lib/types.ts';
+import { TiltManagerSDK } from '../packages/sdk/src/tiltManagerSDK.ts';
+import type { Config } from '../packages/sdk/src/types.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = join(__dirname, 'fixtures');

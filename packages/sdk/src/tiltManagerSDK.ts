@@ -12,7 +12,7 @@ import type {
   ResourceRow,
   StatusResponse,
   StatusUpdate,
-} from '../lib/types.ts';
+} from './types.ts';
 
 type EnvState = 'running' | 'starting' | 'stopped';
 
