@@ -490,7 +490,8 @@
                                   </div>
                                   {#if resource.waitingReason}
                                     <span class="truncate text-[10px] text-muted-foreground">
-                                      Waiting: {resource.waitingReason}{#if resource.waitingOn && resource.waitingOn.length > 0}{' '}(on:
+                                      Waiting: {resource.waitingReason}{#if resource.waitingOn && resource.waitingOn.length > 0}
+                                        (on:
                                         {resource.waitingOn.join(', ')}){/if}
                                     </span>
                                   {/if}
@@ -526,7 +527,7 @@
                                       {/if}
                                       {#if resource.conditions && resource.conditions.length > 0}
                                         <div class="mt-1 border-t border-border/50 pt-1">
-                                          {#each resource.conditions as cond}
+                                          {#each resource.conditions as cond (cond.type)}
                                             <div class="flex items-center gap-1">
                                               <span
                                                 class={cond.status === 'True'

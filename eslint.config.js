@@ -27,6 +27,13 @@ export default ts.config(
     },
   },
   {
+    // @html usage in OutputPane is safe — ansi_up generates styled <span> elements only
+    files: ['src/features/output/components/OutputPane.svelte'],
+    rules: {
+      'svelte/no-at-html-tags': 'off',
+    },
+  },
+  {
     ignores: ['dist/', 'node_modules/', 'TiltLauncher.app/', '*.mjs'],
   },
 );

@@ -14,14 +14,13 @@
  *   tilt.envLogs['my-env']            // string[]
  *   tilt.resourceLogs['my-env:svc']   // string[]
  */
-import { onMount } from 'svelte';
-import { fetchStatus, fetchLogs, onStatusUpdate, onLogDelta } from '$lib/api.ts';
+import { fetchStatus, onStatusUpdate, onLogDelta } from '$lib/api.ts';
 import type { EnvStatusUpdate, LogDelta, StatusUpdate } from '$lib/types.ts';
 
 const MAX_LOG_LINES = 2000;
 
 // ── Singleton reactive state ──────────────────────────────────────
-let envs: Record<string, EnvStatusUpdate> = $state({});
+const envs: Record<string, EnvStatusUpdate> = $state({});
 let envLogs: Record<string, string[]> = $state({});
 let resourceLogs: Record<string, string[]> = $state({});
 let initialized = false;
