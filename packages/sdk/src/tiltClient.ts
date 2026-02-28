@@ -227,19 +227,21 @@ export class TiltClient {
     }
   }
 
-  /** Fetch all resources from this Tilt instance. */
+  /** Fetch all resources from this Tilt instance via `tilt get`. */
   async getResources(): Promise<TiltResource[]> {
-    const resp = await fetch(`${this.baseUrl}/api/v1alpha1/uiresources`, {
-      signal: AbortSignal.timeout(this.timeoutMs),
-    });
-    if (!resp.ok) {
-      throw new Error(`Tilt API error: ${resp.status} ${resp.statusText}`);
+    const result = await this.runTiltCli(['get', 'uiresources', '-o', 'json']);
+    if (result.code !== 0) {
+      throw new Error(`tilt get uiresources failed (exit ${result.code}): ${result.output.trim()}`);
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await resp.json()) as { items?: any[] };
-    return (data.items ?? [])
-      .filter((item: { metadata?: { name?: string } }) => item.metadata?.name && item.metadata.name !== '(Tiltfile)')
-      .map((item: unknown) => parseUIResource(item, this.port));
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = JSON.parse(result.output) as { items?: any[] };
+      return (data.items ?? [])
+        .filter((item: { metadata?: { name?: string } }) => item.metadata?.name && item.metadata.name !== '(Tiltfile)')
+        .map((item: unknown) => parseUIResource(item, this.port));
+    } catch {
+      throw new Error(`Failed to parse tilt output as JSON: ${result.output.slice(0, 200)}`);
+    }
   }
 
   /** Fetch resources and return a structured status summary. */
@@ -256,14 +258,9 @@ export class TiltClient {
 
   /** Trigger a resource update (equivalent to pressing the trigger button in Tilt UI). */
   async triggerResource(name: string): Promise<void> {
-    const resp = await fetch(`${this.baseUrl}/api/trigger`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ manifest_names: [name], build_reason: 16 /* manual */ }),
-      signal: AbortSignal.timeout(this.timeoutMs),
-    });
-    if (!resp.ok) {
-      throw new Error(`Tilt trigger error: ${resp.status} ${resp.statusText}`);
+    const result = await this.runTiltCli(['trigger', name]);
+    if (result.code !== 0) {
+      throw new Error(`tilt trigger failed (exit ${result.code}): ${result.output.trim()}`);
     }
   }
 
@@ -296,6 +293,35 @@ export class TiltClient {
     this.closed = true;
     this.watchCallback = null;
     this.disconnectWS();
+  }
+  // ── CLI helper ───────────────────────────────────────────────────────
+
+  private async runTiltCli(args: string[]): Promise<{ code: number; output: string }> {
+    const { spawn } = await import('node:child_process');
+    return new Promise((resolve) => {
+      const child = spawn('tilt', [...args, '--port', String(this.port)], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      let output = '';
+      child.stdout.on('data', (chunk: Buffer) => {
+        output += chunk.toString();
+      });
+      child.stderr.on('data', (chunk: Buffer) => {
+        output += chunk.toString();
+      });
+      const timer = setTimeout(() => {
+        child.kill('SIGTERM');
+        resolve({ code: 1, output: `${output}\ntilt command timed out after ${this.timeoutMs}ms` });
+      }, this.timeoutMs);
+      child.on('close', (code) => {
+        clearTimeout(timer);
+        resolve({ code: code ?? 1, output });
+      });
+      child.on('error', (err: Error) => {
+        clearTimeout(timer);
+        resolve({ code: 1, output: `${output}\n${err.message}` });
+      });
+    });
   }
 
   // ── WebSocket internals ──────────────────────────────────────────────

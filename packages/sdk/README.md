@@ -146,8 +146,8 @@ Stream resource + log updates via WebSocket. Returns an unsubscribe function.
 
 ## Requirements
 
+- `tilt` must be on `$PATH`
 - Node.js ≥ 18 or Bun
-- `tilt` on `$PATH` (only required for `TiltManagerSDK`; `TiltClient` uses HTTP)
 
 ## License
 

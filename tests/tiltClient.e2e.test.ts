@@ -230,8 +230,55 @@ describe('TiltClient — basic fixture', () => {
   // ── error handling ──
 
   it('getResources throws on unreachable port', async () => {
-    const client = new TiltClient(19999, { timeoutMs: 2000 });
+    const client = new TiltClient(19999, { timeoutMs: 5000 });
     await expect(client.getResources()).rejects.toThrow();
+    client.close();
+  });
+
+  // ── regression: data shape validation ──
+  // These tests would have caught the HTTP/HTML bug — they validate
+  // that actual TiltResource objects are returned, not garbage data.
+
+  it('every resource has all required TiltResource fields with correct types', async () => {
+    const client = new TiltClient(TILT_PORT);
+    const resources = await client.getResources();
+    for (const r of resources) {
+      expect(typeof r.name).toBe('string');
+      expect(r.name.length).toBeGreaterThan(0);
+      expect(typeof r.label).toBe('string');
+      expect(typeof r.category).toBe('string');
+      expect(typeof r.type).toBe('string');
+      expect(typeof r.runtimeStatus).toBe('string');
+      expect(typeof r.isDisabled).toBe('boolean');
+      expect(['serve', 'cmd', 'unknown']).toContain(r.resourceKind);
+    }
+    client.close();
+  });
+
+  it('runtimeStatus values are valid Tilt statuses (not HTML/garbage)', async () => {
+    const client = new TiltClient(TILT_PORT);
+    const resources = await client.getResources();
+    const validStatuses = ['ok', 'pending', 'error', 'not_applicable', 'disabled', 'unknown'];
+    for (const r of resources) {
+      expect(validStatuses).toContain(r.runtimeStatus);
+    }
+    client.close();
+  });
+
+  it('getStatus categories sum to total resources', async () => {
+    const client = new TiltClient(TILT_PORT);
+    const status = await client.getStatus();
+    // Every resource should appear in exactly one category bucket
+    const categorized = new Set([
+      ...status.healthy.map((r) => r.name),
+      ...status.errors.map((r) => r.name),
+      ...status.pending.map((r) => r.name),
+    ]);
+    // Resources with not_applicable/disabled status won't be in any bucket
+    const active = status.resources.filter(
+      (r) => !r.isDisabled && r.runtimeStatus !== 'not_applicable' && r.runtimeStatus !== 'unknown',
+    );
+    expect(categorized.size).toBe(active.length);
     client.close();
   });
 });
